@@ -68,34 +68,40 @@ async function fetchWithTimeout(resource, options = {}) {
   }
 }
 
+// Unique counter for JSONP callbacks to prevent naming collisions on rapid calls
+let _gvizCbCounter = 0;
+
 async function fetchGVizData(queryString) {
   // Use JSONP (script injection) to bypass CORS — no fetch needed
   return new Promise((resolve, reject) => {
-    const callbackName = '_gvizCb_' + Date.now();
+    // Use counter + timestamp for guaranteed unique callback names
+    const callbackName = '_gvizCb_' + (++_gvizCbCounter) + '_' + Date.now();
+    let script;
     const timeout = setTimeout(() => {
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      reject(new Error("GViz JSONP request timed out after 30s"));
-    }, 30000);
+      cleanup();
+      reject(new Error("GViz JSONP request timed out after 35s"));
+    }, 35000);
+    
+    function cleanup() {
+      clearTimeout(timeout);
+      try { delete window[callbackName]; } catch(e) {}
+      try { if (script && script.parentNode) script.parentNode.removeChild(script); } catch(e) {}
+    }
     
     window[callbackName] = function(response) {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-      if (response.status === 'error') {
-        reject(new Error(response.errors && response.errors[0] ? response.errors[0].detailed_message : "Query Error"));
+      cleanup();
+      if (response && response.status === 'error') {
+        reject(new Error(response.errors && response.errors[0] ? response.errors[0].detailed_message : "GViz Query Error"));
       } else {
-        resolve(response.table);
+        resolve(response ? response.table : null);
       }
     };
     
     const url = `https://docs.google.com/spreadsheets/d/1ip55xEk5rtdqqhCeJ8Hx0IT6aBfnO_0eFIEKh3a7cYg/gviz/tq?sheet=FMS&range=A5:V3500&tqx=out:json;responseHandler:${callbackName}&tq=${encodeURIComponent(queryString)}`;
-    const script = document.createElement('script');
+    script = document.createElement('script');
     script.src = url;
     script.onerror = () => {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      if (script.parentNode) script.parentNode.removeChild(script);
+      cleanup();
       reject(new Error("GViz JSONP script load failed"));
     };
     document.head.appendChild(script);
@@ -135,6 +141,11 @@ function hideInspectionError() {
 
 let inspectionMasterRecords = [];
 let isUpdatingDropdowns = false;
+// Request lock: prevents overlapping inspection data fetches
+let _inspectionFetchInProgress = false;
+// Retry counter for exponential backoff
+let _inspectionRetryCount = 0;
+const _INSPECTION_MAX_RETRIES = 3;
 
 function populateInspectionDropdowns() {
   updateInspectionDropdowns();
@@ -256,97 +267,155 @@ function updateInspectionDropdowns() {
   }
 }
 
-async function loadInspectionKPs() {
-  try {
-    const isOp = currentUser && currentUser.role === 'operator';
-    const op = isOp ? getOperatorCode(currentUser.email) : "";
-    
-    // Helper: GViz JSONP fetch (bypasses CORS, uses Column C = status(PO) only)
-    async function tryGVizFetch(operatorFilter) {
-      console.log("[Inspection] Fetching via GViz JSONP (no CORS issues)...");
-      // Col T=kpNo, F=customer, I=partName, L=quantity, C=status(PO), V=assignedFirst, A=timestamp
-      const query = "SELECT T, F, I, L, C, V, A WHERE T IS NOT NULL";
-      const kpTable = await fetchGVizData(query);
-      let records = [];
-      
-      if (kpTable && kpTable.rows) {
-        records = kpTable.rows.map(row => {
-          const cols = row.c || [];
-          const kpVal = cols[0] ? String(cols[0].v || "").trim() : "";
-          const customer = cols[1] ? String(cols[1].v || "").trim() : "";
-          const partName = cols[2] ? String(cols[2].v || "").trim() : "";
-          const quantity = cols[3] ? String(cols[3].v || "").trim() : "";
-          const status = cols[4] ? String(cols[4].v || "").trim() : "";  // Column C = status(PO) ONLY
-          const assignedRaw = cols[5] ? String(cols[5].v || "").trim() : "";
-          const timestamp = cols[6] ? String(cols[6].v || "").trim() : "";
-          
-          // Split "First / Second" assignment column
-          let assignedFirst = "", assignedSecond = "";
-          if (assignedRaw) {
-            const parts = assignedRaw.split("/").map(s => s.trim());
-            assignedFirst = parts[0] || "";
-            assignedSecond = parts[1] || "";
-          }
-          
-          return { kpNo: kpVal, customer, partName, quantity, status, assignedFirst, assignedSecond, timestamp };
-        })
-        .filter(r => r.kpNo && /^kp-/i.test(r.kpNo));
-      }
-      
-      console.log("[Inspection] GViz returned", records.length, "valid KP records.");
-      
-      // Apply operator filter if needed
-      if (operatorFilter && records.length > 0) {
-        const upperOp = String(operatorFilter).trim().toUpperCase();
-        records = records.filter(r => {
-          const a1 = String(r.assignedFirst || "").trim().toUpperCase();
-          const a2 = String(r.assignedSecond || "").trim().toUpperCase();
-          return a1 === upperOp || a2 === upperOp;
-        });
-        console.log("[Inspection] After operator filter:", records.length, "records for", operatorFilter);
-      }
-      
-      return records;
+async function loadInspectionKPs(isAutoRefresh = false) {
+  // ─── Request Lock: Skip if another fetch is already running ───
+  if (_inspectionFetchInProgress) {
+    console.log("[Inspection] Fetch already in progress — skipping duplicate request.");
+    return;
+  }
+  _inspectionFetchInProgress = true;
+
+  // ─── Auth guard: ensure currentUser is available ───
+  const userEmail = currentUser && currentUser.email ? currentUser.email : null;
+  const userRole  = currentUser && currentUser.role  ? currentUser.role  : null;
+  const isOp      = userRole === 'operator';
+  const op        = isOp && userEmail ? getOperatorCode(userEmail) : "";
+
+  console.log("[Inspection] Starting fetch.",
+    "User:", userEmail || "(none)",
+    "Role:", userRole  || "(none)",
+    "Operator code:", op || "(admin/all)",
+    "AutoRefresh:", isAutoRefresh
+  );
+
+  // ─── Inner GViz JSONP fetcher ───
+  async function tryGVizFetch(operatorFilter) {
+    console.log("[Inspection] Fetching via GViz JSONP (CORS-safe)...");
+    // Col T=kpNo, F=customer, I=partName, L=quantity, C=status(PO), V=assignedFirst, A=timestamp
+    const query = "SELECT T, F, I, L, C, V, A WHERE T IS NOT NULL";
+    const kpTable = await fetchGVizData(query);
+    let records = [];
+
+    if (kpTable && kpTable.rows && kpTable.rows.length > 0) {
+      records = kpTable.rows.map(row => {
+        const cols = row.c || [];
+        const kpVal      = cols[0] ? String(cols[0].v || "").trim() : "";
+        const customer   = cols[1] ? String(cols[1].v || "").trim() : "";
+        const partName   = cols[2] ? String(cols[2].v || "").trim() : "";
+        const quantity   = cols[3] ? String(cols[3].v || "").trim() : "";
+        const status     = cols[4] ? String(cols[4].v || "").trim() : ""; // Column C = status(PO) ONLY
+        const assignedRaw= cols[5] ? String(cols[5].v || "").trim() : "";
+        const timestamp  = cols[6] ? String(cols[6].v || "").trim() : "";
+
+        let assignedFirst = "", assignedSecond = "";
+        if (assignedRaw) {
+          const parts = assignedRaw.split("/").map(s => s.trim());
+          assignedFirst  = parts[0] || "";
+          assignedSecond = parts[1] || "";
+        }
+
+        return { kpNo: kpVal, customer, partName, quantity, status, assignedFirst, assignedSecond, timestamp };
+      }).filter(r => r.kpNo && /^kp-/i.test(r.kpNo));
     }
-    
-    // === Strategy: Try Apps Script (15s), fall back to JSONP GViz ===
-    let fetchedRecords = null;
-    
+
+    console.log("[Inspection] GViz returned", records.length, "valid KP records.");
+
+    // Apply operator filter
+    if (operatorFilter && records.length > 0) {
+      const upperOp = String(operatorFilter).trim().toUpperCase();
+      const before = records.length;
+      records = records.filter(r => {
+        const a1 = String(r.assignedFirst  || "").trim().toUpperCase();
+        const a2 = String(r.assignedSecond || "").trim().toUpperCase();
+        return a1 === upperOp || a2 === upperOp;
+      });
+      console.log("[Inspection] Operator filter '" + operatorFilter + "': " + before + " → " + records.length + " records.");
+    }
+
+    return records;
+  }
+
+  // ─── Fetch with retry loop ───
+  let fetchedRecords = null;
+  let lastError = null;
+  const maxAttempts = _INSPECTION_MAX_RETRIES;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      let queryUrl = scriptUrl + "?action=getInspectionKPs";
-      if (isOp && op) queryUrl += "&operator=" + encodeURIComponent(op);
-      
-      console.log("[Inspection] Trying Apps Script (15s timeout)...");
-      const response = await fetchWithTimeout(queryUrl, { timeout: 15000 });
-      if (!response.ok) throw new Error("Backend API returned status " + response.status);
-      const resData = await response.json();
-      
-      if (resData && resData.success === false) throw new Error(resData.error || "Backend error");
-      if (!Array.isArray(resData)) throw new Error("Invalid format from backend.");
-      
-      fetchedRecords = resData;
-      console.log("[Inspection] Loaded from Apps Script. Records:", fetchedRecords.length);
-    } catch (scriptError) {
-      const msg = scriptError.name === 'AbortError' ? 'timed out' : scriptError.message;
-      console.warn("[Inspection] Apps Script " + msg + ", falling back to GViz JSONP...");
-      
-      fetchedRecords = await tryGVizFetch(isOp ? op : null);
-      console.log("[Inspection] Loaded from GViz JSONP fallback. Records:", fetchedRecords.length);
+      // Attempt 1: Apps Script backend (20s timeout)
+      if (attempt === 1) {
+        try {
+          let queryUrl = scriptUrl + "?action=getInspectionKPs";
+          if (isOp && op) queryUrl += "&operator=" + encodeURIComponent(op);
+
+          console.log("[Inspection] Attempt " + attempt + ": Apps Script (20s)...");
+          const response = await fetchWithTimeout(queryUrl, { timeout: 20000 });
+          if (!response.ok) throw new Error("Backend API returned HTTP " + response.status);
+          const resData = await response.json();
+
+          if (resData && resData.success === false) throw new Error(resData.error || "Backend returned success=false");
+          if (!Array.isArray(resData)) throw new Error("Backend returned non-array response");
+
+          fetchedRecords = resData;
+          console.log("[Inspection] Apps Script success. Records:", fetchedRecords.length);
+          break; // success — exit retry loop
+
+        } catch (scriptErr) {
+          const errMsg = scriptErr.name === 'AbortError' ? 'timed out after 20s' : scriptErr.message;
+          console.warn("[Inspection] Apps Script failed (" + errMsg + "), trying GViz JSONP...");
+
+          // Fall through to GViz within the same attempt
+          fetchedRecords = await tryGVizFetch(isOp ? op : null);
+          console.log("[Inspection] GViz fallback success. Records:", fetchedRecords.length);
+          break; // success — exit retry loop
+        }
+
+      } else {
+        // Attempts 2+: GViz JSONP only (Apps Script is too slow to retry)
+        const delay = Math.pow(2, attempt - 1) * 1500; // 1.5s, 3s
+        console.log("[Inspection] Retry " + attempt + "/" + maxAttempts + " via GViz in " + delay + "ms...");
+        await new Promise(r => setTimeout(r, delay));
+        fetchedRecords = await tryGVizFetch(isOp ? op : null);
+        console.log("[Inspection] GViz retry " + attempt + " success. Records:", fetchedRecords.length);
+        break; // success — exit retry loop
+      }
+
+    } catch (err) {
+      lastError = err;
+      console.warn("[Inspection] Attempt " + attempt + " failed:", err.message);
+      if (attempt === maxAttempts) {
+        console.error("[Inspection] All " + maxAttempts + " attempts failed. Last error:", lastError.message);
+      }
     }
-    
-    if (fetchedRecords && fetchedRecords.length > 0) {
-      inspectionMasterRecords = fetchedRecords;
-    }
-    
-    if (inspectionMasterRecords.length === 0) {
-      throw new Error("No inspection records found.");
-    }
-    
+  }
+
+  _inspectionFetchInProgress = false;
+
+  // ─── Apply results ───
+  if (fetchedRecords && fetchedRecords.length > 0) {
+    _inspectionRetryCount = 0;
+    inspectionMasterRecords = fetchedRecords;
+    console.log("[Inspection] ✅ Data loaded. Total records:", inspectionMasterRecords.length,
+      "| Operator:", op || "ALL",
+      "| Role:", userRole);
     populateInspectionDropdowns();
     hideInspectionError();
-  } catch (error) {
-    console.error("Error loading inspection master data:", error);
-    showInspectionError("Unable to load inspection master data.");
+  } else if (fetchedRecords && fetchedRecords.length === 0 && (isOp && op)) {
+    // Operator with 0 records is valid (no jobs assigned to them yet)
+    inspectionMasterRecords = [];
+    console.log("[Inspection] ✅ No records assigned to operator '", op, "' — showing empty state.");
+    populateInspectionDropdowns();
+    hideInspectionError();
+  } else {
+    // Keep previously loaded data if any — don't wipe the UI
+    if (inspectionMasterRecords.length > 0) {
+      console.warn("[Inspection] ⚠ Fetch failed but retaining " + inspectionMasterRecords.length + " cached records.");
+      // Don't call showInspectionError — keep the UI functional with stale data
+    } else {
+      const errMsg = lastError ? lastError.message : "No data returned";
+      console.error("[Inspection] ❌ No records available and no cache:", errMsg);
+      showInspectionError("Inspection data temporarily unavailable. Tap 🔄 Refresh to retry.");
+    }
   }
 }
 
@@ -693,7 +762,9 @@ async function initApp() {
     }
     
     // Fetch Google Sheet master data on startup
-    await loadInspectionKPs().catch(e => console.error(e));
+    // Use a small delay to ensure currentUser role is set before fetching
+    await new Promise(r => setTimeout(r, 300));
+    await loadInspectionKPs(false).catch(e => console.error("[Inspection] Initial load error:", e));
     renderAll();
     
     startStateTimer();
@@ -702,12 +773,17 @@ async function initApp() {
     startAutoRefresh();
 
     // Live update: Poll Google Sheet for new KP numbers every 2 minutes
+    // Guard prevents overlapping requests via _inspectionFetchInProgress lock
     setInterval(async () => {
+      if (_inspectionFetchInProgress) {
+        console.log("[Inspection] Auto-refresh skipped — fetch already in progress.");
+        return;
+      }
       try {
-        await loadInspectionKPs();
-        console.log("Auto-refreshed Inspection KP list from Google Sheet.");
+        await loadInspectionKPs(true);
+        console.log("[Inspection] Auto-refresh complete.");
       } catch (err) {
-        console.warn("Dynamic KP auto-refresh failed:", err);
+        console.warn("[Inspection] Auto-refresh failed:", err.message);
       }
     }, 120000); // Poll every 2 minutes
   });
