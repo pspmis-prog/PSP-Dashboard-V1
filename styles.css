@@ -31,6 +31,8 @@
   
   --header-height: 70px;
   --sidebar-width: 260px;
+  --bg-card: var(--bg-panel);
+  --text-color: var(--text-main);
 }
 
 /* Light Theme Variables Override */
@@ -53,6 +55,8 @@ body.industrial-theme.light-theme {
   --active-card-selected: rgba(2, 132, 199, 0.12);
   --nav-hover-bg: rgba(15, 23, 42, 0.06);
   --active-step-bg: rgba(2, 132, 199, 0.1);
+  --bg-card: var(--bg-panel);
+  --text-color: var(--text-main);
 }
 
 
@@ -689,6 +693,16 @@ body.industrial-theme {
 
 select.form-input {
   cursor: pointer;
+}
+
+/* Fix standard dropdown visibility in dark/light themes */
+body.industrial-theme select option {
+  background-color: #181818 !important;
+  color: #f5f5f5 !important;
+}
+body.industrial-theme.light-theme select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 /* BUTTONS */

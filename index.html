@@ -9,6 +9,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Fix standard dropdown visibility in dark/light themes */
+    body.industrial-theme select option {
+      background-color: #181818 !important;
+      color: #f5f5f5 !important;
+    }
+    body.industrial-theme.light-theme select option {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+    }
+  </style>
   <script>
     // Immediate Route Guard Check before rendering HTML content
     // Includes company email domain validation (@plasmaspray.co.in)
