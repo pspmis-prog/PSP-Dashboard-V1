@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spraying Stage Console</title>
+  <script>
+    // Immediate Route Guard Check to block unauthorized direct access
+    // Includes company email domain validation (@plasmaspray.co.in)
+    (function() {
+      var ALLOWED_DOMAIN = '@plasmaspray.co.in';
+      const userStr = localStorage.getItem("psp_logged_in_user");
+      if (!userStr) {
+        window.location.href = "login.html";
+        return;
+      }
+      try {
+        const user = JSON.parse(userStr);
+        if (!user || !user.active) {
+          localStorage.removeItem("psp_logged_in_user");
+          window.location.href = "login.html";
+          return;
+        }
+
+        // === COMPANY EMAIL DOMAIN CHECK ===
+        var email = (user.email || '').toLowerCase().trim();
+        if (!email.endsWith(ALLOWED_DOMAIN)) {
+          localStorage.removeItem("psp_logged_in_user");
+          localStorage.removeItem("psp_auth_mock");
+          window.location.href = "login.html";
+          return;
+        }
+        
+        const cleanDept = (user.department || "").toLowerCase().trim();
+        // Allowed roles: super_admin, production_admin, hr_admin, operator (Spraying dept)
+        const isAllowed = user.role === 'super_admin' || 
+                          user.role === 'production_admin' || 
+                          user.role === 'hr_admin' || 
+                          (user.role === 'operator' && cleanDept.includes("spray"));
+                          
+        if (!isAllowed) {
+          if (window.parent && window.parent.showAccessDeniedModal) {
+            window.parent.showAccessDeniedModal("SPRAYING STAGE");
+            if (window.parent.getDefaultTab) {
+              window.parent.location.hash = `#/${window.parent.getDefaultTab().replace('tab-', '')}`;
+            }
+          } else {
+            alert("Access Denied: You do not have permissions to access the Spraying module.");
+            window.location.href = "login.html";
+          }
+        }
+      } catch (e) {
+        localStorage.removeItem("psp_logged_in_user");
+        window.location.href = "login.html";
+      }
+    })();
+
+    // Expose read-only state for React component
+    window.isReadOnly = (function() {
+      const userStr = localStorage.getItem("psp_logged_in_user");
+      if (!userStr) return true;
+      try {
+        const user = JSON.parse(userStr);
+        return user.role === 'hr_admin' || user.role === 'quality_admin';
+      } catch(e) {
+        return true;
+      }
+    })();
+  </script>
+  <!-- Load React 18 & ReactDOM 18 from CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Load Babel Standalone for JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0d0d0d;
+      font-family: Arial, sans-serif;
+    }
+    #root {
+      width: 100%;
+      height: 100%;
+    }
+    /* Custom scrollbars for industrial look matching index.html */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0d0d0d;
+      border-left: 1px solid #5d5d5d;
+      border-top: 1px solid #5d5d5d;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #5d5d5d;
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #8f8f8f;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const scriptUrl = (window.parent && window.parent.scriptUrl) || "https://script.google.com/macros/s/AKfycbxlnuCmkzKn-_dL0E740TKzRQBDMWVUOOnFwti0ygq1Bqg68b7Rcu8CJ0-X7X0MW2hRhg/exec";
+
+    // ── INTERCEPT FETCH FOR SYNCING ──────────────────────────────────────────
+    const originalFetch = window.fetch;
+    window.fetch = async function(url, options) {
+      const urlString = typeof url === 'string' ? url : (url instanceof URL ? url.href : '');
+      const isMock = window.parent ? window.parent.isMockMode() : true;
+      
+      if (urlString.includes('script.google.com')) {
+        // Intercept POST request (SAVE JOB / MATERIAL_LOCATION / DELETE_JOB_QUEUE)
+        if (options && options.method === 'POST') {
+          let data = {};
+          try {
+            data = JSON.parse(options.body);
+          } catch (e) {
+            console.error("Failed to parse POST body in interceptor:", e);
+          }
+
+          console.log("Intercepted POST:", data);
+
+          // Bidirectional sync: update local state in parent window memory
+          if (window.parent && window.parent.jobs) {
+            const localJob = window.parent.jobs.find(j => j.kpNumber === data.jobId);
+            if (localJob) {
+              if (data.type === "SAVE_SPRAYING_JOB") {
+                const next = data.nextProcess || "Grinding";
+                localJob.spraying = localJob.spraying || {};
+                localJob.spraying.status = "Completed";
+                
+                if (window.parent.transitionToStage) {
+                  window.parent.transitionToStage(localJob, next, "Spraying Operator");
+                } else {
+                  localJob.currentDepartment = next;
+                  localJob.status = "Pending";
+                }
+
+                if (window.parent.createAuditLog) {
+                  window.parent.createAuditLog(
+                    "Spraying Operator",
+                    localJob.kpNumber,
+                    `Spraying Completed: Quantity ${data.processedQty}/${localJob.quantity} processed. Transferred to ${next}.`
+                  );
+                }
+              } else if (data.type === "MATERIAL_LOCATION") {
+                localJob.location = data.location;
+                if (window.parent.createAuditLog) {
+                  window.parent.createAuditLog(
+                    "Spraying Operator",
+                    localJob.kpNumber,
+                    `Location updated to: ${data.location}`
+                  );
+                }
+              } else if (data.type === "DELETE_JOB_QUEUE") {
+                localJob.spraying = localJob.spraying || {};
+                localJob.spraying.status = "Completed";
+                localJob.currentDepartment = "Grinding";
+                if (window.parent.createAuditLog) {
+                  window.parent.createAuditLog(
+                    "Spraying Operator",
+                    localJob.kpNumber,
+                    `Job removed from Spraying Queue.`
+                  );
+                }
+              }
+              
+              window.parent.saveState();
+              window.parent.renderAll();
+            }
+          }
+
+          if (!isMock && window.parent && window.parent.sendBackendPost) {
+            // Route to Firestore POST handler
+            try {
+              if (data.type === "SAVE_SPRAYING_JOB") {
+                await window.parent.sendBackendPost({
+                  type: "END_CYCLE",
+                  kpNo: data.jobId,
+                  stage: "Spraying",
+                  nextStage: data.nextProcess || "Grinding",
+                  endTime: new Date().toISOString(),
+                  activeTimeMs: (data.cycleSeconds || 0) * 1000,
+                  batchId: data.batchId || "",
+                  processedQty: data.processedQty || "",
+                  totalPasses: data.totalPasses || "",
+                  finalTemp: data.finalTemp || "",
+                  finalThickness: data.finalThickness || "",
+                  finalSize: data.finalSize || "",
+                  powderConsumed: data.powderConsumed || "",
+                  location: data.location || ""
+                });
+              } else if (data.type === "MATERIAL_LOCATION") {
+                await window.parent.sendBackendPost({
+                  type: "UPDATE_JOB_LOCATION",
+                  kpNo: data.jobId,
+                  location: data.location
+                });
+              } else if (data.type === "DELETE_JOB_QUEUE") {
+                await window.parent.sendBackendPost({
+                  type: "END_CYCLE",
+                  kpNo: data.jobId,
+                  stage: "Spraying",
+                  nextStage: "Grinding",
+                  endTime: new Date().toISOString()
+                });
+              }
+            } catch (err) {
+              console.error("Failed to post spraying update to Firestore:", err);
+            }
+          } else {
+            // Forward to real Google Sheets backend in the background asynchronously (Mock Mode)
+            originalFetch(url, options)
+              .then(response => {
+                if (response.ok) return response.json();
+                throw new Error("HTTP error " + response.status);
+              })
+              .then(result => {
+                console.log("Background POST to Apps Script succeeded:", result);
+              })
+              .catch(err => {
+                console.warn("Background POST to Apps Script failed:", err);
+              });
+          }
+
+          // Return successful Response immediately to keep React frontend snappy!
+          return new Response(JSON.stringify({ success: true, mode: data.type }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Intercept GET request (FETCH QUEUE)
+        if (!options || !options.method || options.method === 'GET') {
+          // Load local jobs from parent
+          let localJobs = [];
+          if (window.parent && window.parent.jobs) {
+            localJobs = window.parent.jobs;
+          } else {
+            const stored = localStorage.getItem("mes_jobs");
+            if (stored) localJobs = JSON.parse(stored);
+          }
+
+          // Map local jobs waiting for Spraying to matching format
+          const localSprayingJobs = localJobs
+            .filter(j => j.currentDepartment === "Spraying" && (!j.spraying || j.spraying.status === "Pending"))
+            .map(j => ({
+              id: j.kpNumber,
+              jobId: j.kpNumber,
+              Part: j.partName,
+              part: j.partName,
+              CustomerName: j.customer,
+              customerName: j.customer,
+              Qty: j.quantity,
+              qty: j.quantity,
+              Status: "Pending",
+              status: "Pending",
+              location: j.storeLocation || j.location || ""
+            }));
+
+          return new Response(JSON.stringify(localSprayingJobs), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      return originalFetch(url, options);
+    };
+
+    // ── DYNAMIC REACT LOADER & TRANSPILER ─────────────────────────────────────
+    async function initReactDashboard() {
+      try {
+        const response = await fetch('spraying_frontend.js');
+        if (!response.ok) throw new Error("Failed to load spraying_frontend.js");
+        let code = await response.text();
+
+        // 1. Rewrite ES Module import to global destructuring from window.React
+        code = code.replace(
+          /import\s+(?:React\s*,\s*)?\{\s*([^}]+)\s*\}\s*from\s*["']react["'];?/gi,
+          'const { $1 } = React;'
+        );
+        // Also cleanup default React import if present alone
+        code = code.replace(
+          /import\s+React\s+from\s+["']react["'];?/gi,
+          ''
+        );
+
+        // 2. Rewrite default export to standard declaration
+        code = code.replace(
+          /export\s+default\s+function\s+SprayBoothDashboard/g,
+          'function SprayBoothDashboard'
+        );
+
+        // 3. Inject refreshTrigger state & custom listener to trigger refetching
+        const injectState = 'const [pendingJobs, setPendingJobs] = React.useState([]);\n' +
+          '  const [refreshTrigger, setRefreshTrigger] = React.useState(0);\n' +
+          '  React.useEffect(() => {\n' +
+          '    const handler = () => setRefreshTrigger(p => p + 1);\n' +
+          '    window.addEventListener("refresh-spraying-data", handler);\n' +
+          '    return () => window.removeEventListener("refresh-spraying-data", handler);\n' +
+          '  }, []);';
+
+        code = code.replace(
+          /const\s+\[pendingJobs,\s*setPendingJobs\]\s*=\s*useState\(\[\]\);/g,
+          injectState
+        );
+
+        // 4. Update the dependency array of the jobs fetch effect
+        code = code.replace(
+          /\},\s*\[scriptUrl\]\s*\);/g,
+          '}, [scriptUrl, refreshTrigger]);'
+        );
+
+        // 5. Apply Theme Colors (Dutch Black)
+        code = code.replaceAll('background: "#0f172a"', 'background: "#0d0d0d"');
+        code = code.replaceAll('background: "#1e293b"', 'background: "#181818"');
+        code = code.replaceAll('background: "#020617"', 'background: "#0d0d0d"');
+        
+        code = code.replaceAll('border: active ? "3px solid #60a5fa" : "2px solid #334155"', 'border: active ? "3px solid #5bc0be" : "2px solid #5d5d5d"');
+        code = code.replaceAll('border: activeJob?.id === job.id ? "4px solid #22d3ee" : "2px solid #475569"', 'border: activeJob?.id === job.id ? "4px solid #5bc0be" : "2px solid #5d5d5d"');
+        code = code.replaceAll('background: activeJob?.id === job.id ? "#155e75" : "#1e293b"', 'background: activeJob?.id === job.id ? "#1a3b3d" : "#181818"');
+        
+        code = code.replaceAll('color: "#93c5fd"', 'color: "#a2ebe9"');
+        code = code.replaceAll('color: "#bfdbfe"', 'color: "#a2ebe9"');
+        code = code.replaceAll('border: "3px solid #475569"', 'border: "2px solid #5d5d5d"');
+        code = code.replaceAll('borderBottom: "3px solid #334155"', 'borderBottom: "2px solid #5d5d5d"');
+        code = code.replaceAll('background: active ? "#2563eb" : "#1e293b"', 'background: active ? "#1a3b3d" : "#181818"');
+        code = code.replaceAll('border: "3px solid #3b82f6"', 'border: "3px solid #5bc0be"');
+        code = code.replaceAll('background: "#334155"', 'background: "#262626"');
+        code = code.replaceAll('border: "2px solid #64748b"', 'border: "2px solid #5d5d5d"');
+        code = code.replaceAll('background: "#2563eb"', 'background: "#1a3b3d"'); 
+        code = code.replaceAll('border: "3px solid #22c55e"', 'border: "3px solid #5bc0be"');
+
+        // Apply input element theme update
+        code = code.replaceAll('border: "3px solid #475569",\n    background: "#0f172a"', 'border: "2px solid #5d5d5d",\n    background: "#262626"');
+
+        // 6. Support read-only restriction for HR / Quality Admin roles
+        code = code.replaceAll('onClick={handleConfirmLocation}', 'disabled={window.isReadOnly} onClick={handleConfirmLocation}');
+        code = code.replaceAll('onClick={handleStart}', 'disabled={window.isReadOnly} onClick={handleStart}');
+        code = code.replaceAll('onClick={() => handleEndJob(job)}', 'disabled={window.isReadOnly} onClick={() => handleEndJob(job)}');
+        code = code.replaceAll('onClick={handleEndCycle}', 'disabled={window.isReadOnly} onClick={handleEndCycle}');
+        code = code.replaceAll('style={commonInputStyle}', 'disabled={window.isReadOnly} style={commonInputStyle}');
+        code = code.replaceAll('disabled={isSaving}', 'disabled={isSaving || window.isReadOnly}');
+        code = code.replace(
+          'type="button"\n                onClick={() => {\n                  if (!tempBatchId) {',
+          'type="button"\n                disabled={window.isReadOnly}\n                onClick={() => {\n                  if (!tempBatchId) {'
+        );
+
+        // 7. Reverse pending jobs array order to show newest incoming processes first (at the top-left)
+        code = code.replace(
+          /pendingJobs\.map\(\(job\)\s*=>/g,
+          '[...pendingJobs].reverse().map((job) =>'
+        );
+
+        // 8. Replace horizontal scroll view layout with a wrapping CSS grid layout
+        // Change outer container styles to fit vertical grid stacking (max 40% viewport height scrollable)
+        code = code.replace(
+          /flex:\s*["']0\s+0\s+245px["'],\s*overflowX:\s*["']auto["'],\s*overflowY:\s*["']hidden["'],\s*whiteSpace:\s*["']nowrap["']/g,
+          'flex: "0 1 auto", maxHeight: "40dvh", overflowY: "auto"'
+        );
+
+        // Change inner container from flex row to grid template
+        code = code.replace(
+          /display:\s*["']inline-flex["'],\s*gap:\s*14,\s*height:\s*["']100%["'],\s*alignItems:\s*["']stretch["']/g,
+          'display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14'
+        );
+
+        // 9. Expose component to global window scope
+        code += '\nwindow.SprayBoothDashboard = SprayBoothDashboard;';
+
+        // 10. Transpile the JSX using Babel Standalone
+        const compiled = Babel.transform(code, {
+          presets: [
+            ['react', { runtime: 'classic' }]
+          ]
+        }).code;
+
+        // 11. Inject script and execute
+        const script = document.createElement('script');
+        script.text = compiled;
+        document.body.appendChild(script);
+
+        // 12. Render to DOM
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(window.SprayBoothDashboard));
+      } catch (err) {
+        console.error("React Component dynamic initialization failed:", err);
+        document.getElementById('root').innerHTML = `
+          <div style="color: #ef4444; padding: 20px; font-weight: bold; text-align: center;">
+            Error loading Spraying Dashboard Component:<br>${err.message}
+          </div>
+        `;
+      }
+    }
+
+    // Run dynamic loader
+    initReactDashboard();
+  </script>
+</body>
+</html>

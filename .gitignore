@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp/build
+.cache/
+dist/
+.vercel/
+
+# Python utility scripts (dev only)
+*.py
+__pycache__/
+*.pyc
+
+# Local testing
+.gemini/

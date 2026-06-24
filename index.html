@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MES - Manufacturing Execution System | Plasma Spray Processors</title>
+  <!-- Google Fonts for Industrial Theme: Inter for layout, Roboto Mono for data & timers -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Immediate Route Guard Check before rendering HTML content
+    // Includes company email domain validation (@plasmaspray.co.in)
+    (function() {
+      var ALLOWED_DOMAIN = '@plasmaspray.co.in';
+      var userStr = localStorage.getItem("psp_logged_in_user");
+      if (!userStr) {
+        window.location.href = "login.html";
+        return;
+      }
+      try {
+        var user = JSON.parse(userStr);
+        if (!user || !user.active) {
+          localStorage.removeItem("psp_logged_in_user");
+          window.location.href = "login.html";
+          return;
+        }
+        // === COMPANY EMAIL DOMAIN CHECK ===
+        var email = (user.email || '').toLowerCase().trim();
+        if (!email.endsWith(ALLOWED_DOMAIN)) {
+          localStorage.removeItem("psp_logged_in_user");
+          // Also clear any other session data
+          localStorage.removeItem("psp_auth_mock");
+          window.location.href = "login.html";
+          return;
+        }
+      } catch (e) {
+        localStorage.removeItem("psp_logged_in_user");
+        window.location.href = "login.html";
+      }
+    })();
+  </script>
+</head>
+<body class="industrial-theme">
+
+  <!-- TOP HEADER -->
+  <header class="mes-header">
+    <button id="btn-hamburger" class="btn-hamburger" aria-label="Toggle Sidebar">☰</button>
+    <div class="header-logo-section">
+      <div class="company-logo-wrapper">
+        <img src="https://www.plasmaspray.co.in/dist/img/NEW%20LOGO.webp" alt="PSP Logo" class="company-logo-img">
+      </div>
+      <div class="company-info">
+        <h1>PLASMA SPRAY PROCESSORS INDIA PVT. LTD.</h1>
+        <p class="mes-subtitle">MANUFACTURING EXECUTION SYSTEM (MES) &bull; PRODUCTION SHOP FLOOR</p>
+      </div>
+    </div>
+    
+    <div class="header-status-section">
+      <div class="header-meta-item">
+        <span class="meta-label">THEME MODE:</span>
+        <button id="btn-theme-toggle" class="btn btn-secondary btn-xs font-bold" style="padding: 2px 6px; font-size: 10px; height: 22px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          <span id="theme-toggle-icon">☀️</span> <span id="theme-toggle-text">LIGHT</span>
+        </button>
+      </div>
+      <div class="header-meta-item" style="display: none;">
+        <span class="meta-label">CURRENT SHIFT:</span>
+        <select id="header-shift-select" class="header-select">
+          <option value="A Shift">A Shift (06:00 - 14:00)</option>
+          <option value="B Shift">B Shift (14:00 - 22:00)</option>
+          <option value="C Shift">C Shift (22:00 - 06:00)</option>
+        </select>
+      </div>
+      <div class="header-meta-item">
+        <span class="meta-label">LOGGED USER:</span>
+        <span id="header-user-display" class="font-bold text-cyan" style="font-size: 11px; font-family: var(--font-mono); margin-top: 4px; display: inline-block;">-</span>
+      </div>
+      <div class="header-meta-item">
+        <span class="meta-label">SESSION:</span>
+        <button id="btn-logout" class="btn btn-danger btn-xs font-bold" style="padding: 2px 6px; font-size: 10px; height: 22px; cursor: pointer; display: flex; align-items: center; margin-top: 2px;">LOGOUT</button>
+      </div>
+      <div class="header-meta-item">
+        <span class="meta-label">SYSTEM TIME:</span>
+        <span id="header-clock" class="digital-clock">2026-06-15 11:44:07</span>
+      </div>
+      <div class="header-meta-item system-indicator">
+        <span class="indicator-dot online"></span>
+        <span class="indicator-text">SHOP FLOOR ONLINE</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-container" id="app-container">
+    <!-- Sidebar backdrop overlay when open on tablets -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="mes-sidebar" id="mes-sidebar">
+      <div class="sidebar-section-title">MES WORKFLOW STAGES</div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn" data-tab="tab-overview" id="nav-btn-overview">
+          <span class="stage-num">ALL</span>
+          <span class="stage-name">MES Stage Tracker</span>
+        </button>
+        <div class="nav-separator" id="nav-sep-stages"></div>
+        <button class="nav-btn" data-tab="tab-inspection" id="nav-btn-inspection">
+          <span class="stage-num">01</span>
+          <span class="stage-name">Inspection stage</span>
+          <span class="stage-badge badge-pending" id="badge-count-inspection">0</span>
+        </button>
+        <button class="nav-btn active" data-tab="tab-masking" id="nav-btn-masking">
+          <span class="stage-num">02</span>
+          <span class="stage-name">Masking Department</span>
+          <span class="stage-badge badge-progress" id="badge-count-masking">0</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-spraying" id="nav-btn-spraying">
+          <span class="stage-num">03</span>
+          <span class="stage-name">Spraying stage</span>
+          <span class="stage-badge badge-completed" id="badge-count-spraying">0</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-grinding" id="nav-btn-grinding">
+          <span class="stage-num">04</span>
+          <span class="stage-name">Grinding stage</span>
+          <span class="stage-badge badge-pending" id="badge-count-grinding">0</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-polishing" id="nav-btn-polishing">
+          <span class="stage-num">05</span>
+          <span class="stage-name">Polishing stage</span>
+          <span class="stage-badge badge-pending" id="badge-count-polishing">0</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-final-inspection" id="nav-btn-final-inspection">
+          <span class="stage-num">06</span>
+          <span class="stage-name">Final Inspection</span>
+          <span class="stage-badge badge-pending" id="badge-count-final-inspection">0</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-dispatch" id="nav-btn-dispatch">
+          <span class="stage-num">07</span>
+          <span class="stage-name">Dispatch stage</span>
+          <span class="stage-badge badge-completed" id="badge-count-dispatch">0</span>
+        </button>
+        <div class="nav-separator" id="nav-sep-admin"></div>
+        <button class="nav-btn" data-tab="tab-audit-logs" id="nav-btn-audit-logs">
+          <span class="stage-num">LOG</span>
+          <span class="stage-name">Audit Log Viewer</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-user-management" id="nav-btn-user-management">
+          <span class="stage-num">ADM</span>
+          <span class="stage-name">User Management</span>
+        </button>
+        <button class="nav-btn" data-tab="tab-data-management" id="nav-btn-data-management">
+          <span class="stage-num">DMD</span>
+          <span class="stage-name">Data Management</span>
+        </button>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <p>V1.0.0 &bull; Masking Module</p>
+        <button id="btn-reset-data" class="btn btn-secondary btn-xs">Reset Shop Floor Data</button>
+      </div>
+    </aside>
+
+    <!-- MAIN DASHBOARD VIEWS -->
+    <main class="mes-main-content">
+      
+      <!-- ============================================= -->
+      <!-- TAB: MES OVERVIEW -->
+      <!-- ============================================= -->
+      <section id="tab-overview" class="tab-pane">
+        <div class="section-header">
+          <h2>MES Manufacturing Workflow Pipeline</h2>
+          <p class="section-desc">Global tracking of all Job Cards (KP Numbers) across the 7 production stages.</p>
+        </div>
+        
+        <!-- Workflow Flow Chart -->
+        <div class="workflow-flow-container">
+          <div class="workflow-step" id="wf-step-inspection">
+            <div class="step-header">01. Inspection</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-inspection">0</span>
+              <span class="step-label">KPs Pending Approval</span>
+            </div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step active-step" id="wf-step-masking">
+            <div class="step-header">02. Masking</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-masking">0</span>
+              <span class="step-label">KPs in Process</span>
+            </div>
+            <div class="active-pulse-indicator">Active Dashboard</div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step" id="wf-step-spraying">
+            <div class="step-header">03. Spraying</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-spraying">0</span>
+              <span class="step-label">KPs Waiting / Processed</span>
+            </div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step disabled-step" id="wf-step-grinding">
+            <div class="step-header">04. Grinding</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-grinding">0</span>
+              <span class="step-label">KPs in Stage</span>
+            </div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step disabled-step" id="wf-step-polishing">
+            <div class="step-header">05. Polishing</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-polishing">0</span>
+              <span class="step-label">KPs in Stage</span>
+            </div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step disabled-step" id="wf-step-final">
+            <div class="step-header">06. Final Inspection</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-final-inspection">0</span>
+              <span class="step-label">KPs in Stage</span>
+            </div>
+          </div>
+          
+          <div class="workflow-arrow">&rarr;</div>
+          
+          <div class="workflow-step disabled-step" id="wf-step-dispatch">
+            <div class="step-header">07. Dispatch</div>
+            <div class="step-body">
+              <span class="step-count" id="wf-count-dispatch">0</span>
+              <span class="step-label">KPs Ready</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Overview Table -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3>ACTIVE JOB ROUTING BOARD</h3>
+          </div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KP Number</th>
+                  <th>Part Name</th>
+                  <th>Customer</th>
+                  <th>Quantity</th>
+                  <th>Process Type</th>
+                  <th>Current Location</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                </tr>
+              </thead>
+              <tbody id="overview-jobs-list">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: INSPECTION DASHBOARD (SIMULATED INPUT SOURCE) -->
+      <!-- ============================================= -->
+      <section id="tab-inspection" class="tab-pane">
+        <div class="section-header">
+          <h2>Inspection Department (Job Intake & Approval)</h2>
+          <p class="section-desc">Simulate job registration and inspection. Approving a job here automatically creates a record in the Masking Department.</p>
+        </div>
+
+        <div class="split-layout">
+          <!-- Form to create a new job card -->
+          <div class="panel">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h3>REGISTER NEW COMPONENT FOR INSPECTION</h3>
+              <button type="button" id="btn-refresh-inspection" class="btn btn-secondary btn-xs" style="display: flex; align-items: center; gap: 4px; cursor: pointer; height: 24px; padding: 2px 8px;">
+                <span>🔄</span> REFRESH
+              </button>
+            </div>
+            <div class="panel-body">
+              <div id="inspection-error-msg" style="display: none; margin-bottom: 15px; padding: 10px; border-radius: 4px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--status-hold); color: var(--status-hold); font-weight: bold; font-size: 12px; text-transform: uppercase; text-align: center;">
+                Unable to load inspection master data.
+              </div>
+              <form id="inspection-job-form" class="industrial-form">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="inspect-kp-no">KP Number *</label>
+                    <select id="inspect-kp-no" class="form-input" required>
+                      <option value="">-- Select KP Number --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inspect-part-name">Part Name *</label>
+                    <select id="inspect-part-name" class="form-input" required>
+                      <option value="">-- Select Part Name --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inspect-customer">Customer Name *</label>
+                    <select id="inspect-customer" class="form-input" required>
+                      <option value="">-- Select Customer Name --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inspect-quantity">Quantity *</label>
+                    <select id="inspect-quantity" class="form-input" required>
+                      <option value="">-- Select Quantity --</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inspect-process-type">Process Type *</label>
+                    <select id="inspect-process-type" class="form-input" required>
+                      <option value="Plasma">Plasma</option>
+                      <option value="HCOS">HCOS</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inspect-priority">Priority *</label>
+                    <select id="inspect-priority" class="form-input" required>
+                      <option value="Normal">Normal</option>
+                      <option value="High">High</option>
+                      <option value="Critical">Critical</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">REGISTER JOB CARD</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Table of jobs pending inspection/approval -->
+          <div class="panel">
+            <div class="panel-header">
+              <h3>COMPONENTS UNDER INSPECTION</h3>
+            </div>
+            <div class="panel-body">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>KP Number</th>
+                    <th>Part Name</th>
+                    <th>Customer</th>
+                    <th>Qty</th>
+                    <th>Process</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="inspection-queue-list">
+                  <!-- Dynamic Content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Admin Workload & Assignment Tracking View -->
+        <div id="admin-inspection-panel" class="panel" style="display: none; margin-top: 20px; width: 100%;">
+          <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <h3>ADMIN INSPECTION WORKLOAD TRACKING</h3>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <select id="admin-filter-operator" class="form-input select-sm" style="width: 150px; height: 28px; padding: 2px 5px; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);">
+                <option value="">All Operators</option>
+                <option value="GT">GT</option>
+                <option value="VG">VG</option>
+                <option value="MF">MF</option>
+                <option value="SJ">SJ</option>
+                <option value="JN">JN</option>
+                <option value="Laxmi">Laxmi</option>
+              </select>
+              <select id="admin-filter-status" class="form-input select-sm" style="width: 150px; height: 28px; padding: 2px 5px; font-size: 12px; background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);">
+                <option value="">All Statuses</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Active">Active (Non-Delivered)</option>
+              </select>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>KP Number</th>
+                    <th>Customer Name</th>
+                    <th>Part Name</th>
+                    <th>Quantity</th>
+                    <th>Assigned (First / Second)</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-inspection-list">
+                  <!-- Dynamic Admin Workload Content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: MASKING DASHBOARD (MAIN TARGET OF THE TASK) -->
+      <!-- ============================================= -->
+      <section id="tab-masking" class="tab-pane active">
+        
+        <!-- SECTION TITLE & SUPERVISOR SUMMARY OVERLAYS -->
+        <div class="masking-dashboard-header">
+          <div class="section-title-wrapper">
+            <h2>MASKING DEPARTMENT CONTROL PANEL</h2>
+            <p class="section-desc">Track active cycles, material consumption, and operator assignments for approved parts.</p>
+          </div>
+        </div>
+
+        <!-- SUB-NAVIGATION TABS FOR MASKING -->
+        <div class="masking-tabs-nav">
+          <button type="button" class="masking-tab-btn active" data-subtab="masking-subtab-queue">
+            <span class="subtab-icon">📋</span>
+            <span class="subtab-label">Queue</span>
+          </button>
+          <button type="button" class="masking-tab-btn" data-subtab="masking-subtab-active">
+            <span class="subtab-icon">⚡</span>
+            <span class="subtab-label">Active Job</span>
+          </button>
+          <button type="button" class="masking-tab-btn" data-subtab="masking-subtab-materials">
+            <span class="subtab-icon">📦</span>
+            <span class="subtab-label">Materials</span>
+          </button>
+          <button type="button" class="masking-tab-btn" data-subtab="masking-subtab-history">
+            <span class="subtab-icon">📜</span>
+            <span class="subtab-label">History</span>
+          </button>
+          <button type="button" class="masking-tab-btn" data-subtab="masking-subtab-supervisor">
+            <span class="subtab-icon">🛠️</span>
+            <span class="subtab-label">Supervisor View</span>
+          </button>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 1: QUEUE -->
+        <!-- ============================================= -->
+        <div id="masking-subtab-queue" class="masking-subtab-panel active">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>MODULE 01: MASKING LIVE DEPARTMENT QUEUE</h3>
+              <span class="panel-subtitle">Displaying approved jobs from Inspection waiting to start masking operations.</span>
+            </div>
+            <div class="panel-body">
+              
+              <!-- Filters Toolbar -->
+              <div class="filters-toolbar">
+                <div class="filter-group">
+                  <label for="filter-kp">KP No:</label>
+                  <input type="text" id="filter-kp" class="form-input input-sm" placeholder="Search KP...">
+                </div>
+                <div class="filter-group">
+                  <label for="filter-customer">Customer:</label>
+                  <input type="text" id="filter-customer" class="form-input input-sm" placeholder="Search Customer...">
+                </div>
+                <div class="filter-group">
+                  <label for="filter-process">Process:</label>
+                  <select id="filter-process" class="form-input select-sm">
+                    <option value="">All Processes</option>
+                    <option value="Plasma">Plasma</option>
+                    <option value="HCOS">HCOS</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="filter-status">Status:</label>
+                  <select id="filter-status" class="form-input select-sm">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Hold">Hold</option>
+                  </select>
+                </div>
+                <button id="btn-clear-filters" class="btn btn-secondary btn-sm" style="height:60px; min-width: 120px;">CLEAR FILTERS</button>
+              </div>
+
+              <!-- Queue Cards Grid (Replaces traditional table) -->
+              <div id="masking-queue-cards" class="queue-cards-grid">
+                <!-- Dynamic Content (Glove friendly cards) generated in app.js -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 2: ACTIVE MASKING OPERATIONS -->
+        <!-- ============================================= -->
+        <div id="masking-subtab-active" class="masking-subtab-panel">
+          <div class="split-layout">
+            
+            <!-- MODULE 2: ACTIVE MASKING OPERATION PANEL -->
+            <div class="panel active-operation-panel">
+              <div class="panel-header header-alert">
+                <h3>MODULE 02: ACTIVE MASKING STATION MONITOR</h3>
+                <div class="live-dot-pulse">
+                  <span class="pulse-dot"></span>
+                  <span class="pulse-txt">CYCLE STATIONS</span>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div id="no-active-job-message" class="no-selection-message">
+                  <p>NO ACTIVE MASKING CYCLE RUNNING</p>
+                  <span class="sub-text">Select a job from the Queue sub-tab and tap "Start Masking" to spin up the timer panel.</span>
+                </div>
+
+                <div id="active-job-timer-interface" class="timer-interface-grid" style="display: none;">
+                  <!-- Info Section -->
+                  <div class="job-meta-details">
+                    <div class="meta-row">
+                      <span class="meta-key">KP Number:</span>
+                      <span class="meta-val highlight-kp" id="active-kp-no">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-key">Part Name:</span>
+                      <span class="meta-val" id="active-part-name">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-key">Customer:</span>
+                      <span class="meta-val" id="active-customer">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-key">Quantity / Process:</span>
+                      <span class="meta-val"><span id="active-qty">0</span> Parts / <span id="active-process" class="badge badge-normal">-</span></span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-key">Assigned Operator:</span>
+                      <span class="meta-val" id="active-operator-display">-</span>
+                    </div>
+                    <div class="meta-row" style="display:none;">
+                      <span class="meta-key">Active Shift:</span>
+                      <span class="meta-val" id="active-shift-display">-</span>
+                    </div>
+                  </div>
+
+                  <!-- Digital Timer Section -->
+                  <div class="timer-display-box">
+                    <div class="timer-container-large">
+                      <div class="timer-sub-lbl">CURRENT CYCLE TIME</div>
+                      <div class="digital-digits text-cyan" id="timer-cycle-current">00:00:00</div>
+                    </div>
+                    
+                    <div class="timer-secondary-metrics">
+                      <div class="timer-sub-metric">
+                        <span class="sub-lbl">Total Active Duration:</span>
+                        <span class="sub-val" id="timer-total-active">00:00:00</span>
+                      </div>
+                      <div class="timer-sub-metric">
+                        <span class="sub-lbl">Cycle Status:</span>
+                        <span id="active-cycle-status-badge" class="badge">STANDBY</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Next Process Selection Dropdown -->
+                  <div class="form-group mt-1" id="masking-next-process-container" style="padding: 10px 0;">
+                    <label for="masking-next-process" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Next Process *</label>
+                    <select id="masking-next-process" class="form-input" style="height: 48px; font-size: 16px;">
+                      <option value="Inspection">Inspection</option>
+                      <option value="Masking">Masking</option>
+                      <option value="Spraying" selected>Spraying</option>
+                      <option value="Grinding">Grinding</option>
+                      <option value="Polishing">Polishing</option>
+                      <option value="Final Inspection">Final Inspection</option>
+                      <option value="Dispatch">Dispatch</option>
+                    </select>
+                  </div>
+
+                  <!-- Timer Controls Actions (80px Minimum height) -->
+                  <div class="timer-actions-bar">
+                    <button id="btn-start-cycle" class="btn btn-success font-bold btn-tablet-primary">START MASKING</button>
+                    <button id="btn-pause-cycle" class="btn btn-warning font-bold btn-tablet-primary" style="display: none;">PAUSE</button>
+                    <button id="btn-resume-cycle" class="btn btn-info font-bold btn-tablet-primary" style="display: none;">RESUME</button>
+                    <button id="btn-end-cycle" class="btn btn-danger font-bold btn-tablet-primary" style="display: none;">END JOB</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MODULE 3: ACTIVE JOB CARDS -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>MODULE 03: SHOP FLOOR RUNNING CARDS</h3>
+              </div>
+              <div class="panel-body card-layout-scroll" id="active-job-cards-container" style="max-height: 480px;">
+                <!-- Dynamic running job cards will render here -->
+                <div class="no-selection-message">No Jobs currently in the workspace.</div>
+              </div>
+            </div>
+
+          </div>
+
+
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 3: MATERIALS -->
+        <!-- ============================================= -->
+        <div id="masking-subtab-materials" class="masking-subtab-panel">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>MODULE 04: MATERIAL CONSUMPTION TRACKING</h3>
+            </div>
+            <div class="panel-body">
+              <div id="no-material-job-selected" class="no-selection-message">
+                <p>SELECT ACTIVE JOB TO RECORD MATERIAL USAGE</p>
+              </div>
+              
+              <div id="material-tracking-interface" style="display: none;">
+                <div class="materials-header-info">
+                  <div style="font-size:18px;">Recording usage for KP: <strong id="mat-active-kp" class="text-cyan"></strong></div>
+                  <div class="material-metrics-row">
+                    <div class="mini-metric" style="padding:5px 10px;">
+                      <span>Total Used:</span>
+                      <span id="calc-total-used" class="font-mono text-cyan">0.00 KG</span>
+                    </div>
+                    <div class="mini-metric" style="padding:5px 10px;">
+                      <span>Usage/Part:</span>
+                      <span id="calc-usage-part" class="font-mono text-cyan">0.00 KG/pc</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <table class="data-table mt-1">
+                  <thead>
+                    <tr>
+                      <th>Material Name</th>
+                      <th>Type</th>
+                      <th>Batch Number</th>
+                      <th>Planned Qty</th>
+                      <th>Actual Used</th>
+                      <th>Unit</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="materials-tracking-rows">
+                    <!-- Dynamic material rows generated in app.js -->
+                  </tbody>
+                </table>
+
+                <div class="material-add-section" style="margin-top: 30px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                  <h4 style="font-size:18px; margin-bottom:15px;">Add Consumable to Job</h4>
+                  <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div class="form-group">
+                      <label for="mat-add-select">Material Select:</label>
+                      <select id="mat-add-select" class="form-input" style="height:60px;">
+                        <!-- Populated in JS -->
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="mat-add-qty">Planned Quantity:</label>
+                      <input type="number" id="mat-add-qty" placeholder="Planned Quantity" min="0" step="0.01" class="form-input" style="height:60px; font-size:18px;">
+                    </div>
+                  </div>
+                  <button id="btn-add-mat-to-job" class="btn btn-secondary btn-tablet-primary">ADD MATERIAL</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 4: HISTORY -->
+        <!-- ============================================= -->
+        <div id="masking-subtab-history" class="masking-subtab-panel">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>MODULE 08: COMPLETED JOB HISTORY RECORD</h3>
+            </div>
+            <div class="panel-body">
+              
+              <!-- History Filters -->
+              <div class="filters-toolbar">
+                <div class="filter-group">
+                  <label for="hist-filter-kp">KP No:</label>
+                  <input type="text" id="hist-filter-kp" class="form-input input-sm" placeholder="Search KP...">
+                </div>
+                <div class="filter-group">
+                  <label for="hist-filter-customer">Customer:</label>
+                  <input type="text" id="hist-filter-customer" class="form-input input-sm" placeholder="Search Customer...">
+                </div>
+                <div class="filter-group">
+                  <label for="hist-filter-operator">Operator:</label>
+                  <input type="text" id="hist-filter-operator" class="form-input input-sm" placeholder="Search Operator...">
+                </div>
+                <div class="filter-group">
+                  <label for="hist-filter-process">Process:</label>
+                  <select id="hist-filter-process" class="form-input select-sm">
+                    <option value="">All Processes</option>
+                    <option value="Plasma">Plasma</option>
+                    <option value="HCOS">HCOS</option>
+                  </select>
+                </div>
+                <button id="btn-clear-hist-filters" class="btn btn-secondary btn-sm" style="height:60px; min-width: 120px;">CLEAR FILTERS</button>
+              </div>
+
+              <!-- History Table -->
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>KP Number</th>
+                    <th>Part Name</th>
+                    <th>Customer</th>
+                    <th>Qty</th>
+                    <th>Operator</th>
+                    <th>Shift</th>
+                    <th>Cycle Start</th>
+                    <th>Cycle End</th>
+                    <th>Duration</th>
+                    <th>Materials Consumed</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="job-history-list">
+                  <!-- Dynamic Content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 5: SUPERVISOR VIEW -->
+        <!-- ============================================= -->
+        <div id="masking-subtab-supervisor" class="masking-subtab-panel">
+          <!-- METRICS & CONTROLS -->
+          <div class="metrics-grid">
+            <!-- SUPERVISOR PANEL CARD -->
+            <div class="metrics-panel">
+              <div class="metrics-panel-title">SUPERVISOR CONTROL CENTER</div>
+              <div class="metrics-grid-mini">
+                <div class="metric-card">
+                  <span class="metric-val" id="sup-kps-waiting">0</span>
+                  <span class="metric-lbl">KPs Waiting Queue</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-blue" id="sup-kps-progress">0</span>
+                  <span class="metric-lbl">KPs In Progress</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-green" id="sup-kps-completed">0</span>
+                  <span class="metric-lbl">KPs Completed</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-cyan" id="sup-ops-active">0</span>
+                  <span class="metric-lbl">Active Operators</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val font-mono" id="sup-avg-cycle">00:00:00</span>
+                  <span class="metric-lbl">Avg Cycle Time</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-orange" id="sup-utilization">0%</span>
+                  <span class="metric-lbl">Dept. Utilization</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- DAILY SUMMARY CARD -->
+            <div class="metrics-panel">
+              <div class="metrics-panel-title">DAILY PRODUCTION SUMMARY</div>
+              <div class="metrics-grid-mini">
+                <div class="metric-card">
+                  <span class="metric-val" id="day-kps-processed">0</span>
+                  <span class="metric-lbl">KPs Processed Today</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val" id="day-parts-processed">0</span>
+                  <span class="metric-lbl">Parts Processed Today</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val" id="day-material-consumed">0.00 KG</span>
+                  <span class="metric-lbl">Total Material Used</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-orange" id="day-jobs-pending">0</span>
+                  <span class="metric-lbl">Pending KPs Left</span>
+                </div>
+                <div class="metric-card">
+                  <span class="metric-val text-green" id="day-jobs-completed">0</span>
+                  <span class="metric-lbl">Completed KPs Today</span>
+                </div>
+                <div class="metric-card text-center" style="grid-column: span 1; justify-content: center; display: flex; flex-direction: column;">
+                  <span class="metric-label-heavy text-cyan" id="day-shift-display" style="font-size: 18px;">A Shift</span>
+                  <span class="metric-lbl">Current Shop Run</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SHIFT OPERATOR REGISTRY & CYCLE TIMING CHRONOLOGY -->
+          <div class="split-layout">
+            <!-- MODULE 10: OPERATOR MANAGEMENT -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>MODULE 10: SHIFT OPERATOR REGISTRY</h3>
+              </div>
+              <div class="panel-body">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Operator Name</th>
+                      <th>Current Shift</th>
+                      <th>Jobs Assigned</th>
+                      <th>Jobs Completed</th>
+                      <th>Total Active Time</th>
+                    </tr>
+                  </thead>
+                  <tbody id="operators-table-body">
+                    <!-- Dynamic Content -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- MODULE 5: CYCLE TRACKING LOGS -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>MODULE 05: CYCLE TIMING CHRONOLOGY</h3>
+              </div>
+              <div class="panel-body">
+                <div id="no-cycle-job-selected" class="no-selection-message">
+                  <p>SELECT AN ACTIVE OR PREVIOUS JOB FOR TIMING RECORDS</p>
+                </div>
+                <div id="cycle-tracking-display" style="display: none;">
+                  <h4 class="text-cyan mb-1" style="font-size: 18px;">Time Profile: KP - <span id="cycle-track-kp"></span></h4>
+                  <div class="timing-log-card">
+                    <div class="timing-row">
+                      <span class="t-lbl">Cycle Start Time:</span>
+                      <span class="t-val font-mono" id="cycle-track-start">--:--:--</span>
+                    </div>
+                    <div class="timing-row">
+                      <span class="t-lbl">Cycle End Time:</span>
+                      <span class="t-val font-mono" id="cycle-track-end">--:--:--</span>
+                    </div>
+                    <div class="timing-row highlight-row">
+                      <span class="t-lbl">Total Masking Duration:</span>
+                      <span class="t-val font-mono" id="cycle-track-duration">--:--:--</span>
+                    </div>
+                  </div>
+                  
+                  <!-- Pause/Resume instances list -->
+                  <h5 class="mt-1 text-muted" style="font-size:16px;">Hold Logs for current cycle:</h5>
+                  <div class="hold-events-list font-mono" id="cycle-track-hold-events" style="max-height: 150px; font-size:14px;">
+                    <!-- Filled dynamically -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: SPRAYING DASHBOARD (SIMULATED OUTPUT STAGE) -->
+      <!-- ============================================= -->
+      <section id="tab-spraying" class="tab-pane" style="height: calc(100vh - 70px); width: calc(100% + 40px); margin: -20px; padding: 0; overflow: hidden;">
+        <iframe id="spraying-iframe" src="about:blank" style="width: 100%; height: 100%; border: none; overflow: hidden; display: block;" allow="fullscreen" allowfullscreen></iframe>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: SYSTEM AUDIT LOGS (MODULE 11) -->
+      <!-- ============================================= -->
+      <section id="tab-audit-logs" class="tab-pane">
+        <div class="section-header">
+          <h2>MODULE 11: SHOP FLOOR EVENT AUDIT LOG</h2>
+          <p class="section-desc">A chronological, unalterable log tracking all movements, timer events, and material changes across the departments.</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h3>MES LOG LOGGER</h3>
+            <button id="btn-export-logs" class="btn btn-secondary btn-sm">Export Audit Log (Console)</button>
+          </div>
+          <div class="panel-body">
+            <table class="data-table font-mono text-xs">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Logged User</th>
+                  <th>Role</th>
+                  <th>Department</th>
+                  <th>KP Number</th>
+                  <th>Activity Action Log</th>
+                </tr>
+              </thead>
+              <tbody id="audit-logs-table-body">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: GRINDING DASHBOARD (SIMULATED STAGE) -->
+      <!-- ============================================= -->
+      <!-- ============================================= -->
+      <!-- TAB: GRINDING DASHBOARD -->
+      <!-- ============================================= -->
+      <section id="tab-grinding" class="tab-pane">
+        
+        <!-- SECTION TITLE & KPI CARDS -->
+        <div class="masking-dashboard-header">
+          <div class="section-title-wrapper">
+            <h2>GRINDING DEPARTMENT CONTROL PANEL</h2>
+            <p class="section-desc">Track active grinding cycles, machine status, pre/post grinding stages, and location logging.</p>
+          </div>
+        </div>
+
+        <!-- KPI CARDS CONTAINER -->
+        <div class="grinding-kpis-grid">
+          <div class="metric-card">
+            <span class="metric-val text-orange" id="grinding-kpis-pending">0</span>
+            <span class="metric-lbl">Pending Jobs</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-val text-blue" id="grinding-kpis-running">0</span>
+            <span class="metric-lbl">Running Jobs</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-val text-cyan" id="grinding-kpis-machines">0</span>
+            <span class="metric-lbl">Machines Running</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-val text-green" id="grinding-kpis-completed">0</span>
+            <span class="metric-lbl">Completed Jobs</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-val font-mono" id="grinding-kpis-avgtime" style="font-size: 24px !important;">00:00:00</span>
+            <span class="metric-lbl">Average Cycle Time</span>
+          </div>
+        </div>
+
+        <!-- SUB-NAVIGATION TABS FOR GRINDING -->
+        <div class="grinding-tabs-nav">
+          <button type="button" class="grinding-tab-btn active" data-subtab="grinding-subtab-queue">
+            <span class="subtab-icon">📋</span>
+            <span class="subtab-label">Queue</span>
+          </button>
+          <button type="button" class="grinding-tab-btn" data-subtab="grinding-subtab-active">
+            <span class="subtab-icon">⚡</span>
+            <span class="subtab-label">Active Job</span>
+          </button>
+          <button type="button" class="grinding-tab-btn" data-subtab="grinding-subtab-history">
+            <span class="subtab-icon">📜</span>
+            <span class="subtab-label">History</span>
+          </button>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 1: QUEUE -->
+        <!-- ============================================= -->
+        <div id="grinding-subtab-queue" class="grinding-subtab-panel active">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>MODULE 01: GRINDING LIVE DEPARTMENT QUEUE</h3>
+              <span class="panel-subtitle">Displaying approved jobs waiting for grinding operations.</span>
+            </div>
+            <div class="panel-body">
+              
+              <!-- Filters Toolbar -->
+              <div class="filters-toolbar">
+                <div class="filter-group">
+                  <label for="grinding-filter-kp">KP No:</label>
+                  <input type="text" id="grinding-filter-kp" class="form-input input-sm" placeholder="Search KP...">
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-filter-customer">Customer:</label>
+                  <input type="text" id="grinding-filter-customer" class="form-input input-sm" placeholder="Search Customer...">
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-filter-machine">Machine:</label>
+                  <select id="grinding-filter-machine" class="form-input select-sm">
+                    <option value="">All Machines</option>
+                    <option value="Amba">Amba</option>
+                    <option value="HMT G17">HMT G17</option>
+                    <option value="Kirloskar MC.28">Kirloskar MC.28</option>
+                    <option value="Italy ID">Italy ID</option>
+                    <option value="Churchill">Churchill</option>
+                    <option value="Zanetti Toss">Zanetti Toss</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-filter-process">Process:</label>
+                  <select id="grinding-filter-process" class="form-input select-sm">
+                    <option value="">All Processes</option>
+                    <option value="Pre Grinding">Pre Grinding</option>
+                    <option value="Post Grinding">Post Grinding</option>
+                  </select>
+                </div>
+                <button id="btn-grinding-clear-filters" class="btn btn-secondary btn-sm" style="height:60px; min-width: 120px;">CLEAR FILTERS</button>
+              </div>
+
+              <!-- Queue Cards Grid (Glove friendly cards) -->
+              <div id="grinding-queue-cards" class="queue-cards-grid">
+                <!-- Dynamic Content generated in app.js -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 2: ACTIVE GRINDING OPERATIONS -->
+        <!-- ============================================= -->
+        <div id="grinding-subtab-active" class="grinding-subtab-panel">
+          <div class="split-layout">
+            
+            <!-- MODULE 2: ACTIVE GRINDING OPERATION PANEL -->
+            <div class="panel active-operation-panel grinding-active-monitor">
+              <div class="panel-header header-alert">
+                <h3>MODULE 02: ACTIVE GRINDING STATION MONITOR</h3>
+                <div class="live-dot-pulse">
+                  <span class="pulse-dot"></span>
+                  <span class="pulse-txt">GRINDING CYCLE</span>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div id="grinding-no-active-job-message" class="no-selection-message">
+                  <p>NO ACTIVE GRINDING CYCLE RUNNING</p>
+                  <span class="sub-text">Select a job from the Queue sub-tab and tap "Start Grinding" to spin up the timer panel.</span>
+                </div>
+
+                <div id="grinding-active-job-timer-interface" class="timer-interface-grid" style="display: none;">
+                  
+                  <!-- Metadata rows -->
+                  <div class="job-meta-details">
+                    <div class="meta-row">
+                      <span class="meta-label">KP NUMBER:</span>
+                      <span id="grinding-active-kp-no" class="font-bold text-cyan" style="font-size:18px;">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">COMPONENT PART:</span>
+                      <span id="grinding-active-part-name" class="font-bold">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">CUSTOMER:</span>
+                      <span id="grinding-active-customer" class="font-bold">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">BATCH QUANTITY:</span>
+                      <span id="grinding-active-qty" class="font-bold font-mono text-cyan" style="font-size:18px;">0</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">ASSIGNED MACHINE:</span>
+                      <span id="grinding-active-machine" class="badge badge-normal font-bold" style="font-size:14px; padding: 4px 8px;">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">GRINDING PROCESS:</span>
+                      <span id="grinding-active-process" class="badge badge-normal font-bold" style="font-size:14px; padding: 4px 8px;">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">STORE LOCATION:</span>
+                      <span id="grinding-active-location" class="font-bold text-orange" style="font-size:18px;">-</span>
+                    </div>
+                    <div class="meta-row">
+                      <span class="meta-label">CYCLE STATE:</span>
+                      <span id="grinding-active-cycle-status-badge" class="badge badge-progress" style="font-size:14px; padding: 4px 8px;">STANDBY</span>
+                    </div>
+                  </div>
+
+                  <!-- Large visible timer -->
+                  <div class="timer-display-box text-center">
+                    <span class="meta-label">ELAPSED ACTIVE CYCLE RUNTIME</span>
+                    <div class="digital-digits text-cyan" id="grinding-timer-readout">00:00:00</div>
+                    
+                    <div class="timer-secondary-metrics mt-1 text-muted" style="display: flex; justify-content: center; gap: 30px;">
+                      <div>
+                        <span class="timer-sub-lbl">Start: </span>
+                        <span class="font-mono text-xs" id="grinding-time-started">--:--:--</span>
+                      </div>
+                      <div>
+                        <span class="timer-sub-lbl">Paused Time: </span>
+                        <span class="font-mono text-xs text-red" id="grinding-time-paused-total">00:00:00</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Remarks / Quality / Notes inputs -->
+                  <div class="panel" style="margin-bottom:0;">
+                    <div class="panel-header" style="background:var(--bg-light); padding: 5px 15px;">
+                      <h3>GRINDING LOGS & REMARKS (OPTIONAL)</h3>
+                    </div>
+                    <div class="panel-body">
+                      <div class="form-grid">
+                        <div class="form-group">
+                          <label for="grinding-operator-remarks">Operator Remarks / Measurements</label>
+                          <input type="text" id="grinding-operator-remarks" placeholder="Enter sizing, roughness info..." class="form-input">
+                        </div>
+                        <div class="form-group">
+                          <label for="grinding-quality-remarks">Quality Inspector Remarks</label>
+                          <input type="text" id="grinding-quality-remarks" placeholder="Enter micro-inspection details..." class="form-input">
+                        </div>
+                      </div>
+                      <div class="form-group mt-1">
+                        <label for="grinding-notes">General Grinding Notes</label>
+                        <input type="text" id="grinding-notes" placeholder="Enter wheel grade, speed settings, coolant info..." class="form-input">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Action Buttons (glove friendly 80px) -->
+                  <div class="timer-actions-bar mt-1" style="display: flex; gap: 15px; width: 100%;">
+                    <button type="button" class="btn btn-success btn-block glove-btn-lg" id="btn-grinding-start-cycle" style="display:none;">START CYCLE</button>
+                    <button type="button" class="btn btn-danger btn-block glove-btn-lg" id="btn-grinding-pause-cycle">PAUSE CYCLE</button>
+                    <button type="button" class="btn btn-warning btn-block glove-btn-lg" id="btn-grinding-resume-cycle" style="display:none;">RESUME CYCLE</button>
+                    <button type="button" class="btn btn-primary btn-block glove-btn-lg" id="btn-grinding-end-cycle">END GRINDING</button>
+                  </div>
+                  
+                </div>
+              </div>
+            </div>
+
+            <!-- ACTIVE STATIONS RUNNING SIDEBAR -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>ACTIVE GRINDING CYCLES</h3>
+              </div>
+              <div class="panel-body" style="max-height: 500px; overflow-y: auto;">
+                <div id="grinding-active-job-cards-container" class="active-cards-list">
+                  <!-- Dynamic Running Cards -->
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ============================================= -->
+        <!-- SUBTAB 3: HISTORY -->
+        <!-- ============================================= -->
+        <div id="grinding-subtab-history" class="grinding-subtab-panel">
+          <div class="panel">
+            <div class="panel-header">
+              <h3>MODULE 03: GRINDING JOB CHRONOLOGY LOG</h3>
+            </div>
+            <div class="panel-body">
+              
+              <!-- Hist Filters -->
+              <div class="filters-toolbar">
+                <div class="filter-group">
+                  <label for="grinding-hist-filter-kp">KP No:</label>
+                  <input type="text" id="grinding-hist-filter-kp" class="form-input input-sm" placeholder="Search KP...">
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-hist-filter-customer">Customer:</label>
+                  <input type="text" id="grinding-hist-filter-customer" class="form-input input-sm" placeholder="Search Customer...">
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-hist-filter-machine">Machine:</label>
+                  <input type="text" id="grinding-hist-filter-machine" class="form-input input-sm" placeholder="Search Machine...">
+                </div>
+                <div class="filter-group">
+                  <label for="grinding-hist-filter-process">Process:</label>
+                  <select id="grinding-hist-filter-process" class="form-input select-sm">
+                    <option value="">All</option>
+                    <option value="Pre Grinding">Pre Grinding</option>
+                    <option value="Post Grinding">Post Grinding</option>
+                  </select>
+                </div>
+                <button id="btn-grinding-clear-hist-filters" class="btn btn-secondary btn-sm" style="height:60px; min-width: 120px;">CLEAR FILTERS</button>
+              </div>
+
+              <table class="data-table mt-1">
+                <thead>
+                  <tr>
+                    <th>KP Number</th>
+                    <th>Part Name</th>
+                    <th>Customer</th>
+                    <th>Qty</th>
+                    <th>Grinding Machine</th>
+                    <th>Process Stage</th>
+                    <th>Location</th>
+                    <th>Duration</th>
+                    <th>Next Destination</th>
+                  </tr>
+                </thead>
+                <tbody id="grinding-history-table-body">
+                  <!-- Dynamic Logs -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: POLISHING DASHBOARD (SIMULATED STAGE) -->
+      <!-- ============================================= -->
+      <section id="tab-polishing" class="tab-pane">
+        <div class="section-header">
+          <h2>Polishing Department Console (Stage 05)</h2>
+          <p class="section-desc">Track final surface roughness (Ra values) and mirror polishing operations.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h3>COMPONENTS IN POLISHING QUEUE</h3>
+          </div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KP Number</th>
+                  <th>Part Name</th>
+                  <th>Customer</th>
+                  <th>Qty</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="polishing-queue-list">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: FINAL INSPECTION (STAGE 06) -->
+      <!-- ============================================= -->
+      <section id="tab-final-inspection" class="tab-pane">
+        <div class="section-header">
+          <h2>Final Quality Inspection (Stage 06)</h2>
+          <p class="section-desc">Review thickness, hardness (HRC), adhesion checks, and issue final quality clearance certificate.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h3>COMPONENTS IN FINAL INSPECTION QUEUE</h3>
+          </div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KP Number</th>
+                  <th>Part Name</th>
+                  <th>Customer</th>
+                  <th>Qty</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="final-inspection-queue-list">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: DISPATCH STAGE (STAGE 07 - FUTURE) -->
+      <!-- ============================================= -->
+      <section id="tab-dispatch" class="tab-pane">
+        <div class="section-header">
+          <h2>Dispatch & Shipping Console (Stage 07)</h2>
+          <p class="section-desc">Track packaging, commercial invoicing, and final dispatch logs.</p>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h3>COMPONENTS COMPLETED & READY FOR DISPATCH</h3>
+          </div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>KP Number</th>
+                  <th>Part Name</th>
+                  <th>Customer</th>
+                  <th>Qty</th>
+                  <th>Status</th>
+                  <th>Priority</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="dispatch-queue-list">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: USER MANAGEMENT (SUPER ADMIN ONLY) -->
+      <!-- ============================================= -->
+      <section id="tab-user-management" class="tab-pane">
+        <div class="section-header">
+          <h2>Security & User Access Management</h2>
+          <p class="section-desc">Provision accounts, configure corporate authorization levels, and suspend or activate access profiles.</p>
+        </div>
+        
+        <div class="split-layout">
+          <!-- Create User Form -->
+          <div class="panel">
+            <div class="panel-header">
+              <h3>PROVISION NEW ACCESS PROFILE</h3>
+            </div>
+            <div class="panel-body">
+              <form id="user-creation-form" class="industrial-form">
+                <div class="form-group">
+                  <label for="user-email">Corporate Email *</label>
+                  <input type="email" id="user-email" class="form-input" required placeholder="name@plasmaspray.co.in" style="height:48px;">
+                </div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="user-password">Password *</label>
+                    <input type="password" id="user-password" class="form-input" required placeholder="••••••••" style="height:48px;">
+                  </div>
+                  <div class="form-group">
+                    <label for="user-confirm-password">Confirm Password *</label>
+                    <input type="password" id="user-confirm-password" class="form-input" required placeholder="••••••••" style="height:48px;">
+                  </div>
+                </div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="user-role">Assigned Role *</label>
+                    <select id="user-role" class="form-input" required style="height:48px;">
+                      <option value="operator">Operator</option>
+                      <option value="production_admin">Production Admin</option>
+                      <option value="hr_admin">HR Admin</option>
+                      <option value="quality_admin">Quality Admin</option>
+                      <option value="super_admin">Super Admin</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="user-dept">Assigned Department *</label>
+                    <select id="user-dept" class="form-input" required style="height:48px;">
+                      <option value="Masking">Masking Operator</option>
+                      <option value="Spraying">Spraying Operator</option>
+                      <option value="Grinding">Grinding Operator</option>
+                      <option value="Polishing">Polishing Operator</option>
+                      <option value="Inspection">Inspection Operator</option>
+                      <option value="All">All Departments (Admins / HR / Quality)</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-success btn-block" style="height:50px; font-weight:bold; font-size: 14px;">PROVISION PROFILE</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- User list table -->
+          <div class="panel">
+            <div class="panel-header">
+              <h3>SYSTEM USER DIRECTORY</h3>
+            </div>
+            <div class="panel-body" style="max-height: 480px; overflow-y: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Name / Email</th>
+                    <th>Verified</th>
+                    <th>Role</th>
+                    <th>Department</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="user-management-table-body">
+                  <!-- Dynamic Content -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- TAB: IT DATA MANAGEMENT DASHBOARD -->
+      <!-- ============================================= -->
+      <section id="tab-data-management" class="tab-pane">
+        <div class="section-header">
+          <h2>IT Data Management Dashboard</h2>
+          <p class="section-desc">Real-time database state monitoring, telemetry, audit feeds, and configuration CRUD control panels.</p>
+        </div>
+        
+        <div class="sub-tab-navigation" style="display:flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
+          <button class="dmd-subtab-btn active" data-subtab="dmd-subtab-health">⚙️ System Health</button>
+          <button class="dmd-subtab-btn" data-subtab="dmd-subtab-operations">🏭 Operations</button>
+          <button class="dmd-subtab-btn" data-subtab="dmd-subtab-security">🛡️ Security & Audits</button>
+          <button class="dmd-subtab-btn" data-subtab="dmd-subtab-crud">✏️ CRUD Panels</button>
+        </div>
+        
+        <!-- Subtab 1: System Health & Telemetry -->
+        <div id="dmd-subtab-health" class="dmd-subtab-content">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+            <!-- Database Telemetry -->
+            <div class="panel">
+              <div class="panel-header"><h3>DATABASE TELEMETRY</h3></div>
+              <div class="panel-body">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                  <div class="kpi-card" style="border-left-color: var(--accent-color); background: rgba(59, 130, 246, 0.05);">
+                    <span class="kpi-val" id="dmd-telemetry-jobs-count" style="font-size:32px;">0</span>
+                    <span class="kpi-label">Jobs Docs</span>
+                  </div>
+                  <div class="kpi-card" style="border-left-color: var(--accent-color); background: rgba(59, 130, 246, 0.05);">
+                    <span class="kpi-val" id="dmd-telemetry-users-count" style="font-size:32px;">0</span>
+                    <span class="kpi-label">Users Docs</span>
+                  </div>
+                  <div class="kpi-card" style="border-left-color: var(--accent-color); background: rgba(59, 130, 246, 0.05);">
+                    <span class="kpi-val" id="dmd-telemetry-audit-count" style="font-size:32px;">0</span>
+                    <span class="kpi-label">Audit Logs</span>
+                  </div>
+                  <div class="kpi-card" style="border-left-color: var(--accent-color); background: rgba(59, 130, 246, 0.05);">
+                    <span class="kpi-val" id="dmd-telemetry-active-sessions" style="font-size:32px;">0</span>
+                    <span class="kpi-label">Sessions</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- System Health -->
+            <div class="panel">
+              <div class="panel-header"><h3>SYSTEM HEALTH & LATENCY</h3></div>
+              <div class="panel-body">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 4px;">
+                    <span>Firestore Connection</span>
+                    <span id="dmd-health-firestore-status" class="badge badge-completed">CONNECTED</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 4px;">
+                    <span>Write Latency</span>
+                    <span id="dmd-health-write-latency" class="font-mono text-cyan">45ms</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 4px;">
+                    <span>Read Latency</span>
+                    <span id="dmd-health-read-latency" class="font-mono text-cyan">30ms</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(255,255,255,0.02); border-radius: 4px;">
+                    <span>Last Heartbeat</span>
+                    <span id="dmd-health-heartbeat" class="font-mono text-muted">Just now</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Error Console -->
+            <div class="panel" style="grid-column: 1 / -1;">
+              <div class="panel-header"><h3>IT ERROR CONSOLE & WRITE FAILURES</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 250px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>User ID</th>
+                        <th>Path/Action</th>
+                        <th>Error Message</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-error-console-body">
+                      <tr><td colspan="4" class="text-center text-muted">No system errors logged.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Subtab 2: Operations -->
+        <div id="dmd-subtab-operations" class="dmd-subtab-content hidden">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+            <!-- Live Job Monitoring -->
+            <div class="panel" style="grid-column: 1 / -1;">
+              <div class="panel-header"><h3>LIVE JOB MONITORING</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 350px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>KP Number</th>
+                        <th>Part / Customer</th>
+                        <th>Stage</th>
+                        <th>Status</th>
+                        <th>Assigned Operator</th>
+                        <th>Store Rack</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-live-jobs-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Live Stage Monitoring -->
+            <div class="panel">
+              <div class="panel-header"><h3>DEPARTMENT STAGES</h3></div>
+              <div class="panel-body">
+                <div style="display: flex; flex-direction: column; gap: 10px;" id="dmd-stage-monitoring-container">
+                  <!-- Dynamic -->
+                </div>
+              </div>
+            </div>
+            
+            <!-- Live Machine Monitoring -->
+            <div class="panel">
+              <div class="panel-header"><h3>LIVE MACHINE STATUS</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 320px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Machine</th>
+                        <th>Status</th>
+                        <th>Active Operator</th>
+                        <th>Current Job</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-live-machines-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Material Consumption -->
+            <div class="panel" style="grid-column: 1 / -1;">
+              <div class="panel-header"><h3>MATERIAL CONSUMPTION LEDGER</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 250px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Job ID</th>
+                        <th>Stage</th>
+                        <th>Material Name</th>
+                        <th>Planned Qty</th>
+                        <th>Actual Qty Used</th>
+                        <th>Unit</th>
+                        <th>Operator</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-material-ledger-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Subtab 3: Security & Auditing -->
+        <div id="dmd-subtab-security" class="dmd-subtab-content hidden">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+            <!-- Live Operator Monitoring -->
+            <div class="panel">
+              <div class="panel-header"><h3>LIVE OPERATOR MONITORING</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 320px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Operator</th>
+                        <th>Shift</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-live-operators-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Audit Logs Feed -->
+            <div class="panel" style="grid-column: 2 / -1;">
+              <div class="panel-header"><h3>REAL-TIME AUDIT LOG FEED</h3></div>
+              <div class="panel-body">
+                <div style="max-height: 320px; overflow-y: auto;" id="dmd-audit-feed-container">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>User (Role)</th>
+                        <th>Department</th>
+                        <th>Action Details</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-live-audit-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- IT User Authorization -->
+            <div class="panel" style="grid-column: 1 / -1;">
+              <div class="panel-header"><h3>IT USER AUTHORIZATION & ELEVATION</h3></div>
+              <div class="panel-body">
+                <p class="text-xs text-muted" style="margin-bottom: 15px;">Review pending registrations and upgrade user permissions (e.g. promoting operator to IT Team).</p>
+                <div style="max-height: 300px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>User Details</th>
+                        <th>Verified</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dmd-user-table-body">
+                      <!-- Dynamic -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Subtab 4: Database CRUD -->
+        <div id="dmd-subtab-crud" class="dmd-subtab-content hidden">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+            <!-- CRUD: Jobs -->
+            <div class="panel">
+              <div class="panel-header"><h3>MANAGE MES JOBS</h3></div>
+              <div class="panel-body">
+                <button type="button" class="btn btn-success btn-block" onclick="openCrudModal('job', 'create')" style="margin-bottom: 10px; width: 100%;">🆕 Create New Job</button>
+                <button type="button" class="btn btn-primary btn-block" onclick="openCrudModal('job', 'edit')" style="margin-bottom: 10px; width: 100%;">✏️ Edit/Update Job</button>
+                <button type="button" class="btn btn-danger btn-block" onclick="openCrudModal('job', 'delete')" style="width: 100%;">🗑️ Delete Job</button>
+              </div>
+            </div>
+            
+            <!-- CRUD: Machines -->
+            <div class="panel">
+              <div class="panel-header"><h3>MANAGE MACHINES</h3></div>
+              <div class="panel-body">
+                <button type="button" class="btn btn-success btn-block" onclick="openCrudModal('machine', 'create')" style="margin-bottom: 10px; width: 100%;">🆕 Create Machine</button>
+                <button type="button" class="btn btn-primary btn-block" onclick="openCrudModal('machine', 'edit')" style="margin-bottom: 10px; width: 100%;">✏️ Edit Machine</button>
+                <button type="button" class="btn btn-danger btn-block" onclick="openCrudModal('machine', 'delete')" style="width: 100%;">🗑️ Delete Machine</button>
+              </div>
+            </div>
+            
+            <!-- CRUD: Materials -->
+            <div class="panel">
+              <div class="panel-header"><h3>MANAGE MASTER MATERIALS</h3></div>
+              <div class="panel-body">
+                <button type="button" class="btn btn-success btn-block" onclick="openCrudModal('material', 'create')" style="margin-bottom: 10px; width: 100%;">🆕 Add Material</button>
+                <button type="button" class="btn btn-primary btn-block" onclick="openCrudModal('material', 'edit')" style="margin-bottom: 10px; width: 100%;">✏️ Edit Material</button>
+                <button type="button" class="btn btn-danger btn-block" onclick="openCrudModal('material', 'delete')" style="width: 100%;">🗑️ Remove Material</button>
+              </div>
+            </div>
+            
+            <!-- CRUD: Departments -->
+            <div class="panel">
+              <div class="panel-header"><h3>MANAGE DEPARTMENTS</h3></div>
+              <div class="panel-body">
+                <button type="button" class="btn btn-success btn-block" onclick="openCrudModal('department', 'create')" style="margin-bottom: 10px; width: 100%;">🆕 Add Department</button>
+                <button type="button" class="btn btn-primary btn-block" onclick="openCrudModal('department', 'edit')" style="margin-bottom: 10px; width: 100%;">✏️ Edit Department</button>
+                <button type="button" class="btn btn-danger btn-block" onclick="openCrudModal('department', 'delete')" style="width: 100%;">🗑️ Delete Department</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ACCESS DENIED MODAL -->
+  <div id="access-denied-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 450px; text-align: center; border: 2px solid var(--status-hold);">
+      <div class="modal-header" style="background-color: rgba(239, 68, 68, 0.15); border-bottom-color: var(--status-hold);">
+        <h3 style="color: var(--status-hold);">ACCESS DENIED</h3>
+      </div>
+      <div class="modal-body" style="padding: 30px 20px;">
+        <div style="font-size: 60px; margin-bottom: 20px;">🚫</div>
+        <p style="font-size: 16px; font-weight: bold; margin-bottom: 10px;" id="access-denied-reason">Unauthorized Module Access Attempted.</p>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">Your corporate account does not have access permissions for this department stage console.</p>
+        <div id="access-denied-user-details" style="font-size: 12px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 20px; text-align: left; border: 1px solid rgba(255,255,255,0.1); line-height: 1.5;"></div>
+        <button class="btn btn-danger btn-tablet-primary" id="btn-close-access-denied" style="width: 100%;">Acknowledge & Return</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ASSIGN OPERATOR AND START MASKING -->
+  <div id="modal-assign-operator" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Assign Operator</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>You are about to start the Masking Process for <strong id="modal-kp-display" class="text-cyan"></strong>.</p>
+        <form id="operator-assign-form" class="industrial-form mt-1">
+          <div class="form-group">
+            <label>Select Operator Name (Tap to select):</label>
+            <div id="modal-operator-buttons" class="touch-select-grid">
+              <!-- Dynamically populated in app.js -->
+            </div>
+          </div>
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-success btn-tablet-primary">Start Masking Cycle</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: COMPLETE MASKING AND SELECT NEXT PROCESS -->
+  <div id="modal-complete-masking" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Complete Masking Job</h3>
+        <button class="modal-close" id="btn-close-complete-masking">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>You are about to complete the Masking process for <strong id="modal-complete-kp-display" class="text-cyan"></strong>.</p>
+        
+        <form id="masking-complete-form" class="industrial-form mt-1">
+          <div class="form-group">
+            <label for="masking-complete-next-process" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Next Process *</label>
+            <select id="masking-complete-next-process" class="form-input" style="height: 60px; font-size: 18px; width: 100%;">
+              <option value="Inspection">Inspection</option>
+              <option value="Masking">Masking</option>
+              <option value="Spraying" selected>Spraying</option>
+              <option value="Grinding">Grinding</option>
+              <option value="Polishing">Polishing</option>
+              <option value="Final Inspection">Final Inspection</option>
+              <option value="Dispatch">Dispatch</option>
+            </select>
+          </div>
+          
+          <!-- Materials Section added in the bottom part/below selection of next process -->
+          <div class="form-group mt-1" id="modal-complete-materials-section">
+            <label style="font-weight: bold; margin-bottom: 10px; display: block;">Record Material Usage *</label>
+            <div id="modal-complete-materials-container" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; display: flex; flex-direction: column; gap: 10px;">
+              <!-- Dynamically populated materials inputs list -->
+            </div>
+          </div>
+          
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-danger btn-tablet-primary">Complete & Transfer Job</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" id="btn-cancel-complete-masking" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAUSE MASKING / HOLD MANAGEMENT -->
+  <div id="modal-pause-masking" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Pause Masking Operation</h3>
+        <button class="modal-close" id="btn-close-pause-masking">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Select a reason and enter remarks to pause the masking cycle for <strong id="modal-pause-kp-display" class="text-cyan"></strong>.</p>
+        
+        <form id="masking-pause-form" class="industrial-form mt-1">
+          <div class="form-group">
+            <label for="pause-reason-select" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Hold Reason *</label>
+            <select id="pause-reason-select" class="form-input" style="height: 60px; font-size: 18px; width: 100%;" required>
+              <option value="">-- Select Reason --</option>
+              <option value="Material Shortage">Material Shortage</option>
+              <option value="Operator Unavailable">Operator Unavailable</option>
+              <option value="Machine Issue">Machine Issue</option>
+              <option value="Quality Issue">Quality Issue</option>
+              <option value="Customer Hold">Customer Hold</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          
+          <div class="form-group mt-1">
+            <label for="pause-remarks" style="font-weight: bold; margin-bottom: 5px; display: block;">Hold Remarks</label>
+            <input type="text" id="pause-remarks" placeholder="Enter details..." class="form-input" style="height:60px; font-size:18px; width: 100%;">
+          </div>
+          
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-danger btn-tablet-primary">Pause Cycle</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" id="btn-cancel-pause-masking" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: START GRINDING (SET UP OPERATION) -->
+  <div id="modal-start-grinding" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Start Grinding Operation</h3>
+        <button class="modal-close" id="btn-close-start-grinding">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Set up the Grinding process parameters for <strong id="modal-grinding-kp-display" class="text-cyan"></strong>.</p>
+        <form id="grinding-start-form" class="industrial-form mt-1">
+          
+          <div class="form-group">
+            <label for="grinding-machine-select" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Grinding Machine *</label>
+            <select id="grinding-machine-select" class="form-input" style="height: 50px; font-size: 16px; width: 100%;" required>
+              <option value="">-- Choose Machine --</option>
+              <option value="Amba">Amba</option>
+              <option value="HMT G17">HMT G17</option>
+              <option value="Kirloskar MC.28">Kirloskar MC.28</option>
+              <option value="Italy ID">Italy ID</option>
+              <option value="Churchill">Churchill</option>
+              <option value="Zanetti Toss">Zanetti Toss</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="grinding-process-select" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Grinding Process *</label>
+            <select id="grinding-process-select" class="form-input" style="height: 50px; font-size: 16px; width: 100%;" required>
+              <option value="Pre Grinding" selected>Pre Grinding</option>
+              <option value="Post Grinding">Post Grinding</option>
+            </select>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="grinding-qty-input" style="font-weight: bold; margin-bottom: 5px; display: block;">Job Qty (Nos) *</label>
+              <input type="number" id="grinding-qty-input" min="1" class="form-input" style="height: 50px; font-size: 16px;" required>
+            </div>
+            <div class="form-group">
+              <label for="grinding-location-select" style="font-weight: bold; margin-bottom: 5px; display: block;">Store Location *</label>
+              <select id="grinding-location-select" class="form-input" style="height: 50px; font-size: 16px; width: 100%;" required>
+                <option value="C20" selected>C20</option>
+                <option value="B27">B27</option>
+                <option value="A15">A15</option>
+                <option value="D08">D08</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-success btn-tablet-primary" style="height: 60px; font-size: 18px;">Start Grinding Cycle</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" id="btn-cancel-start-grinding" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: COMPLETE GRINDING & SELECT NEXT PROCESS -->
+  <div id="modal-complete-grinding" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>End Grinding Operation</h3>
+        <button class="modal-close" id="btn-close-complete-grinding">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Complete Grinding process and transfer <strong id="modal-complete-grinding-kp-display" class="text-cyan"></strong> to the next queue.</p>
+        <form id="grinding-complete-form" class="industrial-form mt-1">
+          
+          <div class="form-group">
+            <label for="grinding-complete-next-process" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Next Process *</label>
+            <select id="grinding-complete-next-process" class="form-input" style="height: 60px; font-size: 18px; width: 100%;" required>
+              <option value="Inspection">Inspection</option>
+              <option value="Masking">Masking</option>
+              <option value="Spraying">Spraying</option>
+              <option value="Grinding">Grinding</option>
+              <option value="Polishing" selected>Polishing</option>
+              <option value="Final Inspection">Final Inspection</option>
+              <option value="Dispatch">Dispatch</option>
+              <option value="Rework">Rework</option>
+              <option value="Hold">Hold</option>
+              <option value="Custom Process">Custom Process</option>
+            </select>
+          </div>
+
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-success btn-tablet-primary" style="height: 60px; font-size: 18px;">Complete & Transfer</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" id="btn-cancel-complete-grinding" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAUSE GRINDING (HOLD REASON SETUP) -->
+  <div id="modal-pause-grinding" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Pause Grinding Operation</h3>
+        <button class="modal-close" id="btn-close-pause-grinding">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Select a reason and enter remarks to pause the grinding cycle for <strong id="modal-pause-grinding-kp-display" class="text-cyan"></strong>.</p>
+        <form id="grinding-pause-form" class="industrial-form mt-1">
+          
+          <div class="form-group">
+            <label for="grinding-pause-reason-select" style="font-weight: bold; margin-bottom: 5px; display: block;">Select Hold Reason *</label>
+            <select id="grinding-pause-reason-select" class="form-input" style="height: 60px; font-size: 18px; width: 100%;" required>
+              <option value="">-- Select Reason --</option>
+              <option value="Material Shortage">Material Shortage</option>
+              <option value="Operator Unavailable">Operator Unavailable</option>
+              <option value="Machine Issue">Machine Issue</option>
+              <option value="Quality Issue">Quality Issue</option>
+              <option value="Customer Hold">Customer Hold</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group mt-1">
+            <label for="grinding-pause-remarks" style="font-weight: bold; margin-bottom: 5px; display: block;">Hold Remarks</label>
+            <input type="text" id="grinding-pause-remarks" placeholder="Enter details..." class="form-input" style="height:60px; font-size:18px; width: 100%;">
+          </div>
+
+          <div class="form-actions mt-1" style="flex-direction: column; gap: 15px;">
+            <button type="submit" class="btn btn-danger btn-tablet-primary" style="height: 60px; font-size: 18px;">Pause Cycle</button>
+            <button type="button" class="btn btn-secondary modal-cancel-btn" id="btn-cancel-pause-grinding" style="height: 60px; font-size: 16px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- DMD CRUD MODAL -->
+  <div id="dmd-crud-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px; border: 2px solid var(--accent-color);">
+      <div class="modal-header" style="background: var(--panel-header-bg); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+        <h3 id="dmd-crud-modal-title">CRUD Operation</h3>
+        <button class="modal-close" onclick="closeCrudModal()" style="background: none; border: none; font-size: 24px; color: var(--text-color); cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 20px;">
+        <form id="dmd-crud-form" class="industrial-form">
+          <div id="dmd-crud-form-fields" style="display: flex; flex-direction: column; gap: 15px;">
+            <!-- Dynamically populated fields -->
+          </div>
+          <div class="form-actions mt-1" style="margin-top: 20px; display: flex; gap: 15px;">
+            <button type="submit" class="btn btn-success" id="dmd-crud-submit-btn" style="height: 48px; width: 100%;">Submit</button>
+            <button type="button" class="btn btn-secondary" onclick="closeCrudModal()" style="height: 48px; width: 100%;">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="firebase-config.js"></script>
+  <script src="seed.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
