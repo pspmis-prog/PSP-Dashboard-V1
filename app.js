@@ -50,6 +50,74 @@ function getOperatorCode(email) {
   return prefix.toUpperCase();
 }
 let activeInspectionRecord = null;
+let oeeLastTickTime = Date.now();
+
+function getOeeStorageKey(dept) {
+  if (!currentUser) return null;
+  const dateStr = new Date().toISOString().split('T')[0];
+  return `psp_oee_${dept.toLowerCase()}_${currentUser.email}_${dateStr}`;
+}
+
+function loadOeeState(dept) {
+  const key = getOeeStorageKey(dept);
+  if (!key) return { noWork: 0, idle: 0, active: 0 };
+  const stored = localStorage.getItem(key);
+  if (stored) {
+    try { return JSON.parse(stored); } catch (e) {}
+  }
+  return { noWork: 0, idle: 0, active: 0 };
+}
+
+function saveOeeState(dept, state) {
+  const key = getOeeStorageKey(dept);
+  if (key) {
+    localStorage.setItem(key, JSON.stringify(state));
+  }
+}
+
+function getOeeCurrentMode(dept) {
+  const deptJobs = jobs.filter(j => j.currentDepartment === dept);
+  if (deptJobs.length === 0) return "NOWORK";
+  
+  if (dept === "Masking") {
+    const activeJob = jobs.find(j => j.currentDepartment === "Masking" && j.masking.status === "In Progress");
+    return activeJob ? "ACTIVE" : "IDLE";
+  }
+  if (dept === "Grinding") {
+    const activeJob = jobs.find(j => j.currentDepartment === "Grinding" && j.grinding?.status === "In Progress");
+    return activeJob ? "ACTIVE" : "IDLE";
+  }
+  if (dept === "Polishing") {
+    return "IDLE";
+  }
+  return "NOWORK";
+}
+
+function updateOeeUi(dept, state, mode) {
+  const oeeValEl = document.getElementById(`${dept.toLowerCase()}-oee-val-oee`);
+  const noworkValEl = document.getElementById(`${dept.toLowerCase()}-oee-val-nowork`);
+  const idleValEl = document.getElementById(`${dept.toLowerCase()}-oee-val-idle`);
+  const activeValEl = document.getElementById(`${dept.toLowerCase()}-oee-val-active`);
+
+  if (!oeeValEl) return;
+
+  const total = state.noWork + state.idle + state.active;
+  const oee = total === 0 ? 0 : ((state.active / total) * 100).toFixed(1);
+
+  oeeValEl.textContent = `${oee}%`;
+  noworkValEl.textContent = formatDuration(state.noWork * 1000);
+  idleValEl.textContent = formatDuration(state.idle * 1000);
+  activeValEl.textContent = formatDuration(state.active * 1000);
+
+  const noworkCard = document.getElementById(`${dept.toLowerCase()}-oee-card-nowork`);
+  const idleCard = document.getElementById(`${dept.toLowerCase()}-oee-card-idle`);
+  const activeCard = document.getElementById(`${dept.toLowerCase()}-oee-card-active`);
+
+  if (noworkCard) noworkCard.classList.toggle("active", mode === "NOWORK");
+  if (idleCard) idleCard.classList.toggle("active", mode === "IDLE");
+  if (activeCard) activeCard.classList.toggle("active", mode === "ACTIVE");
+}
+
 
 async function fetchWithTimeout(resource, options = {}) {
   const { timeout = 1500 } = options;
@@ -2074,6 +2142,13 @@ function renderAll() {
   renderUserManagement();
   renderAuditLogs();
   renderDmdDashboard();
+
+  // Update OEE UI immediately
+  ["Masking", "Grinding", "Polishing"].forEach(dept => {
+    const state = loadOeeState(dept);
+    const mode = getOeeCurrentMode(dept);
+    updateOeeUi(dept, state, mode);
+  });
 }
 
 function updateSidebarCounts() {
@@ -2734,6 +2809,25 @@ function startStateTimer() {
     renderActiveJobCards();
     if (typeof renderGrindingActiveCards === "function") {
       renderGrindingActiveCards();
+    }
+
+    // 5. OEE metrics background timer update
+    const now = Date.now();
+    const elapsedMs = now - oeeLastTickTime;
+    const elapsedSec = Math.floor(elapsedMs / 1000);
+    if (elapsedSec > 0) {
+      oeeLastTickTime = now;
+      ["Masking", "Grinding", "Polishing"].forEach(dept => {
+        const state = loadOeeState(dept);
+        const mode = getOeeCurrentMode(dept);
+        
+        if (mode === "NOWORK") state.noWork += elapsedSec;
+        else if (mode === "IDLE") state.idle += elapsedSec;
+        else if (mode === "ACTIVE") state.active += elapsedSec;
+        
+        saveOeeState(dept, state);
+        updateOeeUi(dept, state, mode);
+      });
     }
   }, 1000);
 }

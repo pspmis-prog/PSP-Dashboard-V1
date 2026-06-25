@@ -564,6 +564,59 @@ body.industrial-theme {
   margin-bottom: 20px;
 }
 
+/* OEE Metrics Grid matching Spraying Console */
+.oee-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.oee-card {
+  background-color: #161616;
+  border: 2px solid #2d2d2d;
+  border-radius: 12px;
+  padding: 15px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: all 0.2s ease;
+  min-height: 90px;
+  box-sizing: border-box;
+}
+
+.oee-card.active {
+  background-color: #0c1e1e;
+  border: 2px solid #2dd4bf;
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.15);
+}
+
+.oee-card .oee-lbl {
+  font-size: 11px;
+  font-weight: 800;
+  color: #a1a1aa;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.oee-card .oee-val {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 1024px) {
+  .oee-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
 .metrics-panel {
   background-color: var(--bg-panel);
   border: 1px solid var(--border-color);
