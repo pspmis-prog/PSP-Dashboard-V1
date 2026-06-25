@@ -336,11 +336,16 @@ function updateInspectionDropdowns() {
     // Exclude delivered records from all operator dropdowns (case-insensitive)
     const activeRecords = inspectionMasterRecords.filter(r => !r.status || r.status.toLowerCase() !== 'delivered');
     
+    const isKpSelected = !!currentKp;
+    
     // 1. Filter records for KP Number dropdown (based on Part, Customer, Qty filters)
+    // If a KP is already selected, we bypass filtering the KP list by the auto-populated fields so the user can change selection.
     const kpRecords = activeRecords.filter(r => {
-      if (currentPart && r.partName !== currentPart) return false;
-      if (currentCust && r.customer !== currentCust) return false;
-      if (currentQty && r.quantity !== currentQty) return false;
+      if (!isKpSelected) {
+        if (currentPart && r.partName !== currentPart) return false;
+        if (currentCust && r.customer !== currentCust) return false;
+        if (currentQty && r.quantity !== currentQty) return false;
+      }
       return true;
     });
     const validKps = [...new Set(kpRecords.map(r => r.kpNo).filter(Boolean))].sort();
@@ -419,13 +424,21 @@ function updateInspectionDropdowns() {
       custSelect.disabled = true;
       qtySelect.disabled = true;
     } else {
+      const wasLocked = partSelect.disabled || custSelect.disabled || qtySelect.disabled;
+      
       partSelect.disabled = false;
       custSelect.disabled = false;
       qtySelect.disabled = false;
 
-      partSelect.value = validParts.includes(currentPart) ? currentPart : "";
-      custSelect.value = validCusts.includes(currentCust) ? currentCust : "";
-      qtySelect.value = validQtys.includes(currentQty) ? currentQty : "";
+      if (wasLocked) {
+        partSelect.value = "";
+        custSelect.value = "";
+        qtySelect.value = "";
+      } else {
+        partSelect.value = validParts.includes(currentPart) ? currentPart : "";
+        custSelect.value = validCusts.includes(currentCust) ? currentCust : "";
+        qtySelect.value = validQtys.includes(currentQty) ? currentQty : "";
+      }
     }
     
     // Check if we have a single fully selected match

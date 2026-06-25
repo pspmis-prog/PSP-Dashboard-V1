@@ -43,7 +43,9 @@ function isMockMode() {
 // ==================== MOCK DB USER INITIALIZATION ====================
 const MOCK_DB = {
   init() {
-    if (!localStorage.getItem('mock_db_users') || !localStorage.getItem('mock_db_users').includes("gt@plasmaspray.co.in")) {
+    if (!localStorage.getItem('mock_db_users') || 
+        !localStorage.getItem('mock_db_users').includes("gt@plasmaspray.co.in") || 
+        localStorage.getItem('mock_db_users').includes('"email":"vg@plasmaspray.co.in","role":"operator"')) {
       const seedUsers = [
         { uid: "uid-super-admin", email: "admin@plasmaspray.co.in", role: "super_admin", department: "All", active: true, emailVerified: true },
         { uid: "uid-production-admin", email: "production@plasmaspray.co.in", role: "production_admin", department: "All", active: true, emailVerified: true },
@@ -53,12 +55,12 @@ const MOCK_DB = {
         { uid: "uid-spraying-operator", email: "spraying@plasmaspray.co.in", role: "operator", department: "Spraying", active: true, emailVerified: true },
         { uid: "uid-grinding-operator", email: "grinding@plasmaspray.co.in", role: "operator", department: "Grinding", active: true, emailVerified: true },
         { uid: "uid-polishing-operator", email: "polishing@plasmaspray.co.in", role: "operator", department: "Polishing", active: true, emailVerified: true },
-        { uid: "uid-gt-operator", email: "gt@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
-        { uid: "uid-vg-operator", email: "vg@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
-        { uid: "uid-mf-operator", email: "mf@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
-        { uid: "uid-sj-operator", email: "sj@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
-        { uid: "uid-jn-operator", email: "jn@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
-        { uid: "uid-laxmi-operator", email: "laxmi@plasmaspray.co.in", role: "operator", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-gt-operator", email: "gt@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-vg-operator", email: "vg@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-mf-operator", email: "mf@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-sj-operator", email: "sj@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-jn-operator", email: "jn@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
+        { uid: "uid-laxmi-operator", email: "laxmi@plasmaspray.co.in", role: "quality_admin", department: "Inspection", active: true, emailVerified: true },
         { uid: "uid-suspended", email: "inactive@plasmaspray.co.in", role: "operator", department: "Masking", active: false, emailVerified: true }
       ];
       localStorage.setItem('mock_db_users', JSON.stringify(seedUsers));
