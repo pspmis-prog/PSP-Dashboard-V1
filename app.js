@@ -2382,6 +2382,11 @@ async function approveInspectionJob(kpNumber) {
       .catch(err => {
         pendingSyncCount--;
         console.error("Failed to sync inspection approval to backend:", err);
+        let errorMsg = "Failed to sync inspection approval: " + (err.message || err);
+        if (err.message && err.message.toLowerCase().includes("permission")) {
+          errorMsg = "Security Error: Missing or insufficient permissions.\n\nThis usually means your account role in the live database is still 'Operator' instead of 'Quality Admin'. Please ask the Administrator to assign you the 'Quality Admin' role in the User Profiles tab of the dashboard.";
+        }
+        alert(errorMsg);
         if (pendingSyncCount === 0) {
           return loadState().then(() => renderAll());
         }
@@ -5213,6 +5218,11 @@ function setupEventListeners() {
       .catch(err => {
         pendingSyncCount--;
         console.error("Failed to sync job creation:", err);
+        let errorMsg = "Failed to register job card: " + (err.message || err);
+        if (err.message && err.message.toLowerCase().includes("permission")) {
+          errorMsg = "Security Error: Missing or insufficient permissions.\n\nThis usually means your account role in the live database is still 'Operator' instead of 'Quality Admin'. Please ask the Administrator to assign you the 'Quality Admin' role in the User Profiles tab of the dashboard.";
+        }
+        alert(errorMsg);
         if (pendingSyncCount === 0) {
           // Rollback if failed
           jobs = jobs.filter(j => j.kpNumber !== kpNo);

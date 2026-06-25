@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user profile data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper function to check if user has a specific role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+    
+    // Helper function to check if user is admin (super_admin, production_admin, quality_admin, hr_admin)
+    function isAdmin() {
+      return isAuthenticated() && getUserData().role in ['super_admin', 'production_admin', 'quality_admin', 'hr_admin'];
+    }
+
+    // Rules for USERS collection
+    match /users/{userId} {
+      // Anyone logged in can read user profiles
+      allow read: if isAuthenticated();
+      // Users can create/update their own profile (useful for signup and self-update)
+      allow create, update: if isAuthenticated() && request.auth.uid == userId;
+      // Admins (especially super_admin) can write/delete any user profile
+      allow write, delete: if hasRole('super_admin');
+    }
+
+    // Rules for JOBS collection
+    match /jobs/{jobId} {
+      allow read: if isAuthenticated();
+      // Only super_admin, production_admin, and quality_admin roles can register/create new jobs
+      allow create: if hasRole('super_admin') || hasRole('production_admin') || hasRole('quality_admin');
+      // All authenticated operators/admins can update jobs (e.g. to start/pause cycles, consumption)
+      allow update: if isAuthenticated();
+      allow delete: if hasRole('super_admin');
+      
+      // Subcollection for material consumption
+      match /material_consumption/{mcId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Rules for MASTER DATA (machines, master_materials, departments)
+    match /machines/{machineId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('super_admin') || hasRole('production_admin');
+    }
+    
+    match /master_materials/{materialId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('super_admin') || hasRole('production_admin');
+    }
+    
+    match /departments/{deptName} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('super_admin') || hasRole('production_admin');
+    }
+
+    // Rules for AUDIT LOGS
+    match /audit_logs/{logId} {
+      // Admins can read audit logs
+      allow read: if isAdmin();
+      // Anyone logged in can append/create audit logs
+      allow create: if isAuthenticated();
+      allow update, delete: if false; // Audit logs should be immutable
+    }
+
+    // Rules for ERROR LOGS
+    match /error_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Rules for NOTIFICATIONS
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated(); // To allow marking as read
+      allow delete: if isAdmin();
+    }
+    
+    // Rules for SYSTEM MONITORING
+    match /system_monitoring/{sysId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
